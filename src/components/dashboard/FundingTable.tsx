@@ -3,7 +3,7 @@
 import { clsx } from 'clsx';
 import { TrendingUp, TrendingDown, Percent } from 'lucide-react';
 import type { FundingRateEntry } from '@/types';
-import { EXCHANGES, formatSymbol, TRACKED_SYMBOLS } from '@/config/exchanges';
+import { EXCHANGES, formatSymbol } from '@/config/exchanges';
 import type { ExchangeId } from '@/types';
 
 interface FundingTableProps {
@@ -33,7 +33,7 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
     matrix[rate.symbol][rate.exchange] = rate;
   }
 
-  const symbols = TRACKED_SYMBOLS.filter((s) => matrix[s]);
+  const symbols = Object.keys(matrix).sort();
 
   if (loading) {
     return (

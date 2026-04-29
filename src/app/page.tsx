@@ -6,8 +6,8 @@ import {
   Activity,
   BarChart3,
 } from 'lucide-react';
-import { Header } from '@/components/layout/Header';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { RefreshControl } from '@/components/ui/RefreshControl';
 import { SpreadTable } from '@/components/dashboard/SpreadTable';
 import { FundingTable } from '@/components/dashboard/FundingTable';
 import { PriceGrid } from '@/components/dashboard/PriceGrid';
@@ -20,12 +20,20 @@ export default function DashboardPage() {
     funding,
     loading,
     lastUpdated,
+    dataAgeSec,
     refresh,
-  } = useMarketData(15_000); // Poll every 15s
+    refreshConfig,
+    setAutoRefresh,
+    setRefreshInterval,
+    changedSpreadIds,
+    symbolCount,
+    exchangeCount,
+    discoveryDone,
+    discoveryLoading,
+    runDiscovery,
+  } = useMarketData();
 
   // Computed stats
-  const activePairs = new Set(tickers.map((t) => t.symbol)).size;
-  const activeExchanges = new Set(tickers.map((t) => t.exchange)).size;
   const bestSpread = spreads.length > 0 ? spreads[0] : null;
   const avgFunding = funding.length > 0
     ? funding.reduce((sum, f) => sum + f.rate, 0) / funding.length
@@ -33,19 +41,33 @@ export default function DashboardPage() {
 
   return (
     <>
-      <Header
-        title="Dashboard"
-        subtitle="Мониторинг спредов и фандингов в реальном времени"
-        lastUpdated={lastUpdated}
-        onRefresh={refresh}
-      />
+      {/* Header row with title + refresh controls */}
+      <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="text-xl font-bold text-text-primary">Dashboard</h1>
+          <p className="text-sm text-text-muted">
+            Мониторинг спредов и фандингов в реальном времени
+          </p>
+        </div>
+        <RefreshControl
+          config={refreshConfig}
+          onToggleAutoRefresh={setAutoRefresh}
+          onSetInterval={setRefreshInterval}
+          onManualRefresh={refresh}
+          dataAgeSec={dataAgeSec}
+          loading={loading}
+          discoveryDone={discoveryDone}
+          discoveryLoading={discoveryLoading}
+          onRunDiscovery={runDiscovery}
+        />
+      </div>
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <StatsCard
           title="Активных пар"
-          value={activePairs}
-          subtitle={`На ${activeExchanges} биржах`}
+          value={symbolCount}
+          subtitle={`На ${exchangeCount} биржах`}
           icon={<BarChart3 size={20} />}
           accentColor="primary"
           animationDelay={0}
@@ -68,25 +90,33 @@ export default function DashboardPage() {
         />
         <StatsCard
           title="Статус"
-          value={loading ? 'Загрузка...' : 'Online'}
-          subtitle="Все системы работают"
+          value={loading ? 'Загрузка...' : !refreshConfig.autoRefresh ? 'Пауза' : 'Online'}
+          subtitle={
+            !refreshConfig.autoRefresh
+              ? `Данные: ${dataAgeSec}с назад`
+              : 'Все системы работают'
+          }
           icon={<Activity size={20} />}
-          accentColor={loading ? 'amber' : 'green'}
+          accentColor={loading ? 'amber' : !refreshConfig.autoRefresh ? 'red' : 'green'}
           animationDelay={3}
         />
       </div>
 
-      {/* Price Grid */}
+      {/* Price Grid — show top 10 by volume */}
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-text-muted uppercase tracking-wider mb-3">
-          Котировки
+          Котировки {symbolCount > 10 && <span className="text-text-muted font-normal">(Топ-10 по объёму)</span>}
         </h3>
         <PriceGrid tickers={tickers} loading={loading} />
       </div>
 
-      {/* Spread Table */}
+      {/* Spread Table — full sorting/filtering/pagination */}
       <div className="mb-6">
-        <SpreadTable spreads={spreads} loading={loading} />
+        <SpreadTable
+          spreads={spreads}
+          loading={loading}
+          changedIds={changedSpreadIds}
+        />
       </div>
 
       {/* Funding Table */}

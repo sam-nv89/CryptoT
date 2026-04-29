@@ -1,8 +1,8 @@
 'use client';
 
 import { Header } from '@/components/layout/Header';
-import { EXCHANGES, TRACKED_SYMBOLS, formatSymbol } from '@/config/exchanges';
-import { Settings, Globe, Clock, Zap } from 'lucide-react';
+import { EXCHANGES, FALLBACK_SYMBOLS, formatSymbol } from '@/config/exchanges';
+import { Settings, Globe, Clock, Zap, Radar } from 'lucide-react';
 import type { ExchangeId } from '@/types';
 
 export default function SettingsPage() {
@@ -16,11 +16,11 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Globe size={18} className="text-primary-400" />
             <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">
-              Подключенные биржи
+              Подключенные биржи ({Object.keys(EXCHANGES).length})
             </h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {(Object.entries(EXCHANGES) as [ExchangeId, typeof EXCHANGES[ExchangeId]][]).map(
               ([id, exchange]) => (
                 <div
@@ -53,12 +53,16 @@ export default function SettingsPage() {
           <div className="flex items-center gap-2 mb-4">
             <Zap size={18} className="text-accent-amber" />
             <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">
-              Отслеживаемые пары
+              Стартовые пары (Fallback)
             </h3>
           </div>
 
+          <p className="text-xs text-text-muted mb-3">
+            При первом запуске используются эти пары. Нажмите «Найти все монеты» на Dashboard для автоматического обнаружения всех пар.
+          </p>
+
           <div className="flex flex-wrap gap-2">
-            {TRACKED_SYMBOLS.map((sym) => (
+            {FALLBACK_SYMBOLS.map((sym) => (
               <span
                 key={sym}
                 className="px-3 py-1.5 rounded-lg bg-bg-elevated border border-border text-sm mono-number text-text-secondary"
@@ -81,9 +85,13 @@ export default function SettingsPage() {
             </h3>
           </div>
 
+          <p className="text-xs text-text-muted mb-3">
+            Частоту обновления можно настроить на Dashboard через панель управления.
+          </p>
+
           <div className="space-y-3">
             {[
-              { label: 'Тикеры (цены)', value: '5 секунд' },
+              { label: 'Тикеры (цены)', value: 'Настраивается (5–60с)' },
               { label: 'Фандинг-рейты', value: '60 секунд' },
               { label: 'Whale-транзакции', value: '30 секунд' },
             ].map((item) => (
@@ -114,11 +122,11 @@ export default function SettingsPage() {
 
           <div className="space-y-2 text-sm text-text-muted">
             <p>
-              <strong className="text-text-secondary">CryptoTracker v0.1.0</strong> —
-              MVP-версия мониторинга спредов и фандинг-рейтов
+              <strong className="text-text-secondary">CryptoTracker v0.2.0</strong> —
+              Мониторинг спредов и фандинг-рейтов с расширенной фильтрацией
             </p>
-            <p>Стек: Next.js 16 + CCXT + TypeScript + Tailwind CSS</p>
-            <p>Данные: Binance, Bybit, OKX (CEX) + Hyperliquid (DEX)</p>
+            <p>Стек: Next.js 16 + CCXT + TypeScript</p>
+            <p>Данные: 12 бирж (11 CEX + Hyperliquid DEX)</p>
           </div>
         </div>
       </div>

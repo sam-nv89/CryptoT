@@ -1,6 +1,9 @@
 // === Exchange & Market Types ===
 
-export type ExchangeId = 'binance' | 'bybit' | 'okx' | 'hyperliquid';
+export type ExchangeId =
+  | 'binance' | 'bybit' | 'okx' | 'gate' | 'bitget'
+  | 'kucoin' | 'mexc' | 'htx' | 'phemex' | 'bingx' | 'coinex'
+  | 'hyperliquid' | 'dydx' | 'apex' | 'poloniex' | 'xt' | 'bitmart' | 'ascendex';
 
 export type ExchangeType = 'cex' | 'dex';
 
@@ -42,6 +45,57 @@ export interface SpreadPair {
   tickers: TickerData[];
   bestSpread: SpreadEntry | null;
   allSpreads: SpreadEntry[];
+}
+
+// === Spread Table Controls ===
+
+export type SpreadSortKey =
+  | 'spreadPercent'
+  | 'spreadAbsolute'
+  | 'symbol'
+  | 'volume24h'
+  | 'buyExchange'
+  | 'sellExchange'
+  | 'buyPrice'
+  | 'sellPrice';
+
+export type SortDirection = 'asc' | 'desc';
+
+export interface SpreadSortConfig {
+  key: SpreadSortKey;
+  direction: SortDirection;
+}
+
+export interface SpreadFilterConfig {
+  /** Free-text symbol search (e.g. "BTC", "SOL") */
+  search: string;
+  /** Show only spreads involving these exchanges (empty = all) */
+  exchanges: ExchangeId[];
+  /** Minimum spread % threshold */
+  minSpreadPercent: number;
+  /** Minimum 24h volume (USD) */
+  minVolume: number;
+  /** Maximum number of rows to display */
+  pageSize: number;
+}
+
+export const DEFAULT_SPREAD_FILTERS: SpreadFilterConfig = {
+  search: '',
+  exchanges: [],
+  minSpreadPercent: 0,
+  minVolume: 0,
+  pageSize: 50,
+};
+
+// === Refresh Control ===
+
+export type RefreshIntervalOption = 5 | 10 | 15 | 30 | 60;
+
+export interface RefreshConfig {
+  /** Auto-refresh enabled */
+  autoRefresh: boolean;
+  /** Interval in seconds */
+  intervalSeconds: RefreshIntervalOption;
 }
 
 // === Funding Rate Types ===
@@ -108,7 +162,7 @@ export interface WhaleTransaction {
   toLabel?: string;
 }
 
-// === Dashboard State ===
+// === Dashboard State (legacy — kept for compat) ===
 
 export interface DashboardFilters {
   symbols: string[];

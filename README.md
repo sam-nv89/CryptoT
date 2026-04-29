@@ -1,36 +1,48 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Crypto Tracker & Arbitrage Dashboard
 
-## Getting Started
+A premium cryptocurrency monitoring dashboard designed for real-time tracking of spreads, funding rates, and arbitrage opportunities across 18+ Centralized (CEX) and Decentralized (DEX) exchanges.
 
-First, run the development server:
+## 🚀 Key Features
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Cross-Exchange Spreads**: Real-time identification of price discrepancies between platforms.
+- **Funding Rate Monitor**: Comparison of funding rates for perpetual futures.
+- **Dynamic Market Discovery**: Automatic scanning and matching of thousands of trading pairs.
+- **Multi-Chain Support**: Integrated with native DEX protocols (Hyperliquid, dYdX, ApeX).
+- **Advanced Filtering**: Granular control over volume, spread percentage, and specific exchanges.
+- **Premium UI**: Modern, high-performance interface with glassmorphism and real-time updates.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🏛 Supported Exchanges
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Centralized (CEX)
+- Binance, Bybit, OKX, Gate.io, MEXC, Bitget, KuCoin, HTX, Phemex, BingX, CoinEx, Poloniex, XT.com, BitMart, AscendEX.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Decentralized (DEX)
+- Hyperliquid, dYdX v4, ApeX Protocol.
 
-## Learn More
+## 🛠 Tech Stack
 
-To learn more about Next.js, take a look at the following resources:
+- **Frontend**: Next.js 15, React 19, TailwindCSS, Framer Motion.
+- **Backend Service**: Node.js, CCXT (CryptoCurrency eXchange Trading Library).
+- **State Management**: React Hooks + Custom Data Cache.
+- **Market Data**: Multi-stream collector with parallel ticker and funding rate fetching.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 📦 Getting Started
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. **Install dependencies**:
+   ```bash
+   npm install
+   ```
 
-## Deploy on Vercel
+2. **Run development server**:
+   ```bash
+   npm run dev
+   ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+3. **Open Dashboard**:
+   Navigate to [http://localhost:3000](http://localhost:3000).
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## ⚠️ Important Note
+Some exchanges (e.g., OKX, Gate.io) may require a **VPN** or specific **Proxy** configuration depending on your regional IP address to bypass API restrictions.
+
+---
+*Built with precision and high-tier engineering.*

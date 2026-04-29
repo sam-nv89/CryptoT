@@ -7,7 +7,7 @@ import { StatsCard } from '@/components/ui/StatsCard';
 import { TrendingUp, TrendingDown, Percent, BarChart3 } from 'lucide-react';
 
 export default function FundingPage() {
-  const { funding, loading, lastUpdated, refresh } = useMarketData(30_000);
+  const { funding, loading, lastUpdated, refresh } = useMarketData();
 
   // Stats
   const positiveCount = funding.filter((f) => f.rate >= 0).length;

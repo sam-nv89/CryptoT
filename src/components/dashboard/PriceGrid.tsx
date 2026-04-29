@@ -2,9 +2,7 @@
 
 import { clsx } from 'clsx';
 import type { TickerData } from '@/types';
-import type { ExchangeId } from '@/types';
-import { EXCHANGES, formatSymbol, TRACKED_SYMBOLS } from '@/config/exchanges';
-import { DollarSign } from 'lucide-react';
+import { EXCHANGES, formatSymbol } from '@/config/exchanges';
 
 interface PriceGridProps {
   tickers: TickerData[];
@@ -20,7 +18,15 @@ export function PriceGrid({ tickers, loading }: PriceGridProps) {
     bySymbol.set(t.symbol, group);
   }
 
-  const symbols = TRACKED_SYMBOLS.filter((s) => bySymbol.has(s));
+  // Show top 10 by total volume across exchanges
+  const symbols = [...bySymbol.entries()]
+    .map(([symbol, ticks]) => ({
+      symbol,
+      totalVolume: ticks.reduce((sum, t) => sum + t.volume24h, 0),
+    }))
+    .sort((a, b) => b.totalVolume - a.totalVolume)
+    .slice(0, 10)
+    .map((s) => s.symbol);
 
   if (loading || !tickers.length) {
     return (
