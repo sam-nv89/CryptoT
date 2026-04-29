@@ -25,10 +25,11 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: '/', label: 'Dashboard', icon: <BarChart3 size={20} /> },
-  { href: '/funding', label: 'Funding', icon: <TrendingUp size={20} /> },
+  { href: '/', label: 'Futures Arb', icon: <BarChart3 size={20} /> },
+  { href: '/spot', label: 'Spot Arb', icon: <Zap size={20} /> },
+  { href: '/funding', label: 'Funding Rates', icon: <TrendingUp size={20} /> },
   { href: '/alerts', label: 'Alerts', icon: <Bell size={20} /> },
-  { href: '/whales', label: 'Whales', icon: <Wallet size={20} />, badge: 'Soon' },
+  { href: '/whales', label: 'Whale Tracker', icon: <Wallet size={20} />, badge: 'Soon' },
   { href: '/settings', label: 'Settings', icon: <Settings size={20} /> },
 ];
 

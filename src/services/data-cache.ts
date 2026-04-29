@@ -4,7 +4,7 @@
  * Stores the latest snapshot of tickers, spreads, funding rates,
  * and dynamically discovered market symbols.
  */
-import type { TickerData, SpreadEntry, FundingRateEntry } from '@/types';
+import type { TickerData, SpreadEntry, FundingRateEntry, SpotSpreadEntry } from '@/types';
 
 interface CacheEntry<T> {
   data: T;
@@ -14,6 +14,7 @@ interface CacheEntry<T> {
 class DataCache {
   private tickers: CacheEntry<TickerData[]> = { data: [], updatedAt: 0 };
   private spreads: CacheEntry<SpreadEntry[]> = { data: [], updatedAt: 0 };
+  private spotSpreads: CacheEntry<SpotSpreadEntry[]> = { data: [], updatedAt: 0 };
   private funding: CacheEntry<FundingRateEntry[]> = { data: [], updatedAt: 0 };
   private discoveredSymbols: string[] = [];
   private discoveryTimestamp = 0;
@@ -32,6 +33,14 @@ class DataCache {
   }
   getSpreads(): CacheEntry<SpreadEntry[]> {
     return this.spreads;
+  }
+
+  // --- Spot Spreads ---
+  setSpotSpreads(data: SpotSpreadEntry[]): void {
+    this.spotSpreads = { data, updatedAt: Date.now() };
+  }
+  getSpotSpreads(): CacheEntry<SpotSpreadEntry[]> {
+    return this.spotSpreads;
   }
 
   // --- Funding ---

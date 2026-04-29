@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useMemo, useCallback } from 'react';
 import { clsx } from 'clsx';
-import { TrendingUp, TrendingDown, Percent } from 'lucide-react';
+import { TrendingUp, TrendingDown, Percent, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import type { FundingRateEntry } from '@/types';
 import { EXCHANGES, formatSymbol } from '@/config/exchanges';
 import type { ExchangeId } from '@/types';
@@ -24,16 +25,63 @@ function SkeletonRow() {
 }
 
 export function FundingTable({ rates, loading }: FundingTableProps) {
+  const [sortColumn, setSortColumn] = useState<ExchangeId | 'symbol'>('symbol');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+
   // Group by symbol → exchange matrix
-  const exchangeIds = Object.keys(EXCHANGES) as ExchangeId[];
+  const exchangeIds = useMemo(() => {
+    return (Object.keys(EXCHANGES) as ExchangeId[])
+      .filter(ex => EXCHANGES[ex].enabled && EXCHANGES[ex].id !== 'hyperliquid'); // Hyperliquid usually has different symbols or is dex
+  }, []);
 
-  const matrix: Record<string, Partial<Record<ExchangeId, FundingRateEntry>>> = {};
-  for (const rate of rates) {
-    if (!matrix[rate.symbol]) matrix[rate.symbol] = {};
-    matrix[rate.symbol][rate.exchange] = rate;
-  }
+  const matrix = useMemo(() => {
+    const m: Record<string, Partial<Record<ExchangeId, FundingRateEntry>>> = {};
+    for (const rate of rates) {
+      if (!m[rate.symbol]) m[rate.symbol] = {};
+      m[rate.symbol][rate.exchange] = rate;
+    }
+    return m;
+  }, [rates]);
 
-  const symbols = Object.keys(matrix).sort();
+  const sortedSymbols = useMemo(() => {
+    const syms = Object.keys(matrix);
+    
+    return syms.sort((a, b) => {
+      let valA: any = a;
+      let valB: any = b;
+
+      if (sortColumn !== 'symbol') {
+        const rateA = matrix[a][sortColumn as ExchangeId]?.rate;
+        const rateB = matrix[b][sortColumn as ExchangeId]?.rate;
+        
+        // Handle missing rates by pushing them to the bottom
+        if (rateA === undefined && rateB === undefined) return 0;
+        if (rateA === undefined) return 1;
+        if (rateB === undefined) return -1;
+        
+        valA = rateA;
+        valB = rateB;
+      }
+
+      if (valA < valB) return sortDirection === 'asc' ? -1 : 1;
+      if (valA > valB) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }, [matrix, sortColumn, sortDirection]);
+
+  const toggleSort = useCallback((column: ExchangeId | 'symbol') => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortColumn(column);
+      setSortDirection('desc'); // Default to desc for rates
+    }
+  }, [sortColumn]);
+
+  const SortIcon = ({ col }: { col: ExchangeId | 'symbol' }) => {
+    if (sortColumn !== col) return <ArrowUpDown size={12} className="opacity-30" />;
+    return sortDirection === 'asc' ? <ArrowUp size={12} /> : <ArrowDown size={12} />;
+  };
 
   if (loading) {
     return (
@@ -104,17 +152,29 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border/70">
-              <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider w-[120px]">
-                Пара
+              <th 
+                className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider w-[120px] cursor-pointer hover:text-text-primary transition-colors"
+                onClick={() => toggleSort('symbol')}
+              >
+                <div className="flex items-center gap-1">
+                  Пара <SortIcon col="symbol" />
+                </div>
               </th>
               {exchangeIds.map((ex) => (
-                <th key={ex} className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase tracking-wider">
-                  <div className="flex items-center justify-center gap-1.5">
-                    <span
-                      className="w-2 h-2 rounded-full"
-                      style={{ backgroundColor: EXCHANGES[ex].color }}
-                    />
-                    {EXCHANGES[ex].name}
+                <th 
+                  key={ex} 
+                  className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase tracking-wider cursor-pointer hover:text-text-primary transition-colors"
+                  onClick={() => toggleSort(ex)}
+                >
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="flex items-center justify-center gap-1.5">
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: EXCHANGES[ex].color }}
+                      />
+                      {EXCHANGES[ex].name}
+                      <SortIcon col={ex} />
+                    </div>
                     <span className={clsx('badge', EXCHANGES[ex].type === 'cex' ? 'badge-cex' : 'badge-dex')}>
                       {EXCHANGES[ex].type}
                     </span>
@@ -124,7 +184,7 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
             </tr>
           </thead>
           <tbody>
-            {symbols.map((symbol, idx) => {
+            {sortedSymbols.map((symbol, idx) => {
               const row = matrix[symbol] ?? {};
               const allRates = Object.values(row).filter(Boolean).map((r) => r!.rate);
               const maxRate = Math.max(...allRates);

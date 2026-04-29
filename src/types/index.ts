@@ -23,6 +23,8 @@ export interface TickerData {
   ask: number;
   last: number;
   volume24h: number;
+  bidVolume: number;
+  askVolume: number;
   timestamp: number;
 }
 
@@ -37,7 +39,25 @@ export interface SpreadEntry {
   spreadPercent: number;
   spreadAbsolute: number;
   volume24h: number;
+  buyVolume: number;
+  sellVolume: number;
+  maxQuantity: number;
+  estimatedProfit: number;
   timestamp: number;
+}
+
+export interface NetworkInfo {
+  network: string;
+  depositEnable: boolean;
+  withdrawEnable: boolean;
+  withdrawFee: number;
+}
+
+export interface SpotSpreadEntry extends SpreadEntry {
+  withdrawNetwork?: string;
+  depositNetwork?: string;
+  withdrawFeeUsd: number;
+  netProfit: number; // estimatedProfit - withdrawFeeUsd - tradingFees
 }
 
 export interface SpreadPair {

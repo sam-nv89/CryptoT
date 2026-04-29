@@ -1,5 +1,28 @@
 # DEV_LOG — CryptoTracker
 
+## 2026-04-29 — Funding Sorting & Spot Fee Fixes
+- **Funding Rates**: Implemented multi-column sorting. Users can now click on "Pair" or any Exchange header to sort rates in ascending/descending order. Added visual indicators (arrows) for current sort state.
+- **Spot Bug Fix (Fees)**: Fixed a critical calculation error where exchange taker fees were used as whole numbers (e.g., 0.05) instead of percentage rates (0.0005). This previously resulted in ~4-8% total fees per trade, wiping out all possible arbitrage opportunities.
+- **Spot Polish**: Translated the entire Spot Arbitrage module to English (titles, stats, table headers).
+- **Spot Debugging**: Relaxed spread thresholds (0.01%) and volume limits ($10) to ensure data visibility during testing. Added detailed logs for data collection and spread calculation.
+- **Reliability**: Updated Gate.io mapping to `gateio` for better CCXT compatibility.
+
+## 2026-04-29 — Volume-Based Spread Logic & UI Update
+- **Data Engine**: `TickerData` and `SpreadEntry` updated to include `bidVolume` and `askVolume`.
+- **Arbitrage Math**: `calculateSpreads` now calculates the intersecting available volume (`maxQuantity`) and `estimatedProfit` in USD, considering token normalization (e.g., 1000PEPE).
+- **UI Enhancements**: `SpreadTable` rewritten to include volumes on the Buy/Sell columns, a new "Max Trade" column showing quantity and dollar investment, and replaced abstract Spread $ with a realistic "Estimated Profit" based on available order book depth.
+
+## 2026-04-29 — Hydration Mismatch Fix
+- **Bug Fix**: Added `suppressHydrationWarning` to the `<html>` tag in `layout.tsx`. This addresses console errors caused by browser extensions (specifically Bybit wallet) injecting `data-bybit-*` attributes during hydration.
+
+## 2026-04-29 — Project Initialization & Server Startup
+- **Project Clone**: Successfully cloned the CryptoT repository.
+- **Dependency Management**: Installed all dependencies via `npm install`.
+- **Environment**: Next.js 16 (Turbopack) environment ready.
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Initial Audit**: Verified project structure and architecture.
+
+
 ## 2026-04-29 — Exchange Expansion & Connection Resilience
 - **Major Expansion**: Integrated 6 additional exchanges: **OKX, Poloniex, CoinEx, XT.com, BitMart, AscendEX**. Total supported platforms increased to **18**.
 - **Connectivity Fixes**:

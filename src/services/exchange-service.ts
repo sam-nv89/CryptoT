@@ -237,6 +237,8 @@ export async function fetchTickers(): Promise<TickerData[]> {
           const bid = book.bid ?? ticker.bid;
           const ask = book.ask ?? ticker.ask;
           const last = ticker.last ?? book.last;
+          const bidVolume = book.bidVolume ?? ticker.bidVolume ?? 0;
+          const askVolume = book.askVolume ?? ticker.askVolume ?? 0;
           
           if (!bid || !ask || !last) continue;
 
@@ -247,6 +249,8 @@ export async function fetchTickers(): Promise<TickerData[]> {
             ask,
             last,
             volume24h: ticker.quoteVolume ?? ticker.baseVolume ?? 0,
+            bidVolume,
+            askVolume,
             timestamp: ticker.timestamp ?? book.timestamp ?? Date.now(),
           });
         }
@@ -312,7 +316,7 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
   const spreads: SpreadEntry[] = [];
 
   // Group tickers by normalized symbol
-  const bySymbol = new Map<string, (TickerData & { normPrice: number; normBid: number; normAsk: number })[]>();
+  const bySymbol = new Map<string, (TickerData & { normPrice: number; normBid: number; normAsk: number; normBidVolume: number; normAskVolume: number })[]>();
   
   for (const t of tickers) {
     const { normalizedSymbol, multiplier } = normalizeSymbol(t.symbol);
@@ -323,6 +327,8 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
       normPrice: t.last / multiplier,
       normBid: t.bid / multiplier,
       normAsk: t.ask / multiplier,
+      normBidVolume: t.bidVolume * multiplier,
+      normAskVolume: t.askVolume * multiplier,
     });
     
     bySymbol.set(normalizedSymbol, group);
@@ -344,6 +350,11 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
           
           // Sanity check: Spreads > 50% are usually different contracts or junk data
           if (spreadPct < 50) {
+            const buyVolume = a.normAskVolume;
+            const sellVolume = b.normBidVolume;
+            const maxQuantity = Math.min(buyVolume, sellVolume);
+            const estimatedProfit = maxQuantity * spreadAbs;
+
             spreads.push({
               symbol: normSymbol,
               buyExchange: a.exchange,
@@ -353,6 +364,10 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
               spreadPercent: spreadPct,
               spreadAbsolute: spreadAbs,
               volume24h: Math.min(a.volume24h, b.volume24h),
+              buyVolume,
+              sellVolume,
+              maxQuantity,
+              estimatedProfit,
               timestamp: Date.now(),
             });
           }
@@ -364,6 +379,11 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
           const spreadPct = (spreadAbs / b.normAsk) * 100;
           
           if (spreadPct < 50) {
+            const buyVolume = b.normAskVolume;
+            const sellVolume = a.normBidVolume;
+            const maxQuantity = Math.min(buyVolume, sellVolume);
+            const estimatedProfit = maxQuantity * spreadAbs;
+
             spreads.push({
               symbol: normSymbol,
               buyExchange: b.exchange,
@@ -373,6 +393,10 @@ export function calculateSpreads(tickers: TickerData[]): SpreadEntry[] {
               spreadPercent: spreadPct,
               spreadAbsolute: spreadAbs,
               volume24h: Math.min(a.volume24h, b.volume24h),
+              buyVolume,
+              sellVolume,
+              maxQuantity,
+              estimatedProfit,
               timestamp: Date.now(),
             });
           }
@@ -427,6 +451,8 @@ export async function fetchHyperliquidData(): Promise<{
       const markPx = parseFloat(ctx.markPx);
       if (!midPx || !markPx) continue;
 
+      const estimatedDepthUsd = 100_000;
+      const defaultVolume = estimatedDepthUsd / midPx;
       tickers.push({
         exchange: 'hyperliquid',
         symbol,
@@ -434,6 +460,8 @@ export async function fetchHyperliquidData(): Promise<{
         ask: midPx * 1.0001,
         last: markPx,
         volume24h: parseFloat(ctx.dayNtlVlm),
+        bidVolume: defaultVolume,
+        askVolume: defaultVolume,
         timestamp: Date.now(),
       });
 

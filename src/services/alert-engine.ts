@@ -78,6 +78,10 @@ export interface ArbitrageSignal {
   netSpreadPercent: number;
   netProfitPer1000: number; // Net $ profit per $1000 capital
   volume24h: number;
+  buyVolume: number;
+  sellVolume: number;
+  maxQuantity: number;
+  netProfitTotal: number;
   tier: 'hot' | 'warm' | 'cold';
   timestamp: number;
   expiresAt: number;
@@ -142,6 +146,10 @@ export function evaluateSpreads(
       netSpreadPercent: netSpread,
       netProfitPer1000: netProfitPer1000,
       volume24h: s.volume24h,
+      buyVolume: s.buyVolume,
+      sellVolume: s.sellVolume,
+      maxQuantity: s.maxQuantity,
+      netProfitTotal: netProfitPer1000 * (s.maxQuantity * s.buyPrice / 1000),
       tier: classifyTier(netSpread),
       timestamp: Date.now(),
       expiresAt: Date.now() + 60_000, // Signal valid for 60s

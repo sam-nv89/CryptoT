@@ -7,28 +7,28 @@ import {
   Search, X, ChevronLeft, ChevronRight, Filter,
 } from 'lucide-react';
 import type {
-  SpreadEntry, ExchangeId,
+  SpotSpreadEntry, ExchangeId,
   SpreadSortKey, SortDirection, SpreadSortConfig, SpreadFilterConfig,
 } from '@/types';
 import { EXCHANGES, formatSymbol } from '@/config/exchanges';
 import { DEFAULT_SPREAD_FILTERS } from '@/types';
 
-interface SpreadTableProps {
-  spreads: SpreadEntry[];
+interface SpotTableProps {
+  spreads: SpotSpreadEntry[];
   loading?: boolean;
   changedIds?: Set<string>;
 }
 
-function spreadUid(s: SpreadEntry): string {
+function spreadUid(s: SpotSpreadEntry): string {
   return `${s.symbol}::${s.buyExchange}->${s.sellExchange}`;
 }
 
 // === Sort comparator ===
-function compareSpreads(a: SpreadEntry, b: SpreadEntry, key: SpreadSortKey, dir: SortDirection): number {
+function compareSpreads(a: SpotSpreadEntry, b: SpotSpreadEntry, key: SpreadSortKey, dir: SortDirection): number {
   let cmp = 0;
   switch (key) {
     case 'spreadPercent': cmp = a.spreadPercent - b.spreadPercent; break;
-    case 'spreadAbsolute': cmp = a.spreadAbsolute - b.spreadAbsolute; break;
+    case 'spreadAbsolute': cmp = a.netProfit - b.netProfit; break; // Use net profit for absolute
     case 'volume24h': cmp = a.volume24h - b.volume24h; break;
     case 'buyPrice': cmp = a.buyPrice - b.buyPrice; break;
     case 'sellPrice': cmp = a.sellPrice - b.sellPrice; break;
@@ -222,7 +222,7 @@ function FilterBar({
 function SkeletonRow() {
   return (
     <tr className="border-b border-border/50">
-      {Array.from({ length: 6 }).map((_, i) => (
+      {Array.from({ length: 7 }).map((_, i) => (
         <td key={i} className="px-3 py-2.5">
           <div className="skeleton h-4 w-16 rounded" />
         </td>
@@ -232,7 +232,7 @@ function SkeletonRow() {
 }
 
 // === Main Table ===
-export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) {
+export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
   const [sort, setSort] = useState<SpreadSortConfig>({ key: 'spreadPercent', direction: 'desc' });
   const [filters, setFilters] = useState<SpreadFilterConfig>({ ...DEFAULT_SPREAD_FILTERS });
   const [page, setPage] = useState(0);
@@ -301,7 +301,7 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
       <div className="glass-card overflow-hidden animate-fade-in">
         <div className="px-4 py-3 border-b border-border flex items-center gap-2">
           <ArrowRightLeft size={16} className="text-primary-400" />
-          <h3 className="text-sm font-semibold text-text-primary">Cross-Exchange Спреды</h3>
+          <h3 className="text-sm font-semibold text-text-primary">Межбиржевой Спот</h3>
         </div>
         <div className="table-wrapper">
           <table className="w-full text-sm">
@@ -311,8 +311,9 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
                 <th className="px-3 py-2.5 text-left text-xs text-text-muted">Покупка</th>
                 <th className="px-3 py-2.5 text-left text-xs text-text-muted">Продажа</th>
                 <th className="px-3 py-2.5 text-right text-xs text-text-muted">Макс. сделка</th>
+                <th className="px-3 py-2.5 text-right text-xs text-text-muted">Сеть Вывода</th>
                 <th className="px-3 py-2.5 text-right text-xs text-text-muted">Спред %</th>
-                <th className="px-3 py-2.5 text-right text-xs text-text-muted">Прибыль ($)</th>
+                <th className="px-3 py-2.5 text-right text-xs text-text-muted">Чистая Прибыль</th>
               </tr>
             </thead>
             <tbody>
@@ -330,7 +331,7 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
       <div className="px-4 py-3 border-b border-border flex items-center justify-between">
         <div className="flex items-center gap-2">
           <ArrowRightLeft size={16} className="text-primary-400" />
-          <h3 className="text-sm font-semibold text-text-primary">Cross-Exchange Спреды</h3>
+          <h3 className="text-sm font-semibold text-text-primary">Spot Arbitrage</h3>
         </div>
       </div>
 
@@ -348,11 +349,11 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
         <div className="p-8 text-center">
           <ArrowRightLeft size={32} className="mx-auto text-text-muted mb-2" />
           <p className="text-text-secondary text-sm font-medium">
-            {spreads.length === 0 ? 'Спреды не обнаружены' : 'Нет результатов по фильтру'}
+            {spreads.length === 0 ? 'Связки не обнаружены' : 'Нет результатов по фильтру'}
           </p>
           <p className="text-text-muted text-xs mt-1">
             {spreads.length === 0
-              ? 'Нажмите «Найти все монеты» для расширенного поиска'
+              ? 'Возможно, биржи не отдают данные о сетях'
               : 'Попробуйте изменить параметры фильтрации'}
           </p>
         </div>
@@ -362,12 +363,13 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border/70">
-                  <SortableHeader label="Пара" sortKey="symbol" currentSort={sort} onSort={handleSort} />
-                  <SortableHeader label="Покупка" sortKey="buyExchange" currentSort={sort} onSort={handleSort} />
-                  <SortableHeader label="Продажа" sortKey="sellExchange" currentSort={sort} onSort={handleSort} />
-                  <SortableHeader label="Макс. сделка" sortKey="volume24h" currentSort={sort} onSort={handleSort} align="right" />
-                  <SortableHeader label="Спред %" sortKey="spreadPercent" currentSort={sort} onSort={handleSort} align="right" />
-                  <SortableHeader label="Прибыль ($)" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
+                  <SortableHeader label="Pair" sortKey="symbol" currentSort={sort} onSort={handleSort} />
+                  <SortableHeader label="Buy" sortKey="buyExchange" currentSort={sort} onSort={handleSort} />
+                  <SortableHeader label="Sell" sortKey="sellExchange" currentSort={sort} onSort={handleSort} />
+                  <SortableHeader label="Max Deal" sortKey="volume24h" currentSort={sort} onSort={handleSort} align="right" />
+                  <SortableHeader label="Network" sortKey="symbol" currentSort={sort} onSort={handleSort} align="right" />
+                  <SortableHeader label="Spread %" sortKey="spreadPercent" currentSort={sort} onSort={handleSort} align="right" />
+                  <SortableHeader label="Net Profit" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
                 </tr>
               </thead>
               <tbody>
@@ -431,6 +433,17 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
                       </td>
 
                       <td className="px-3 py-2 text-right">
+                        <div className="flex flex-col gap-0.5 items-end">
+                          <span className="mono-number text-text-primary text-xs bg-bg-elevated px-1.5 py-0.5 rounded border border-border/50">
+                            {spread.withdrawNetwork || 'Неизвестно'}
+                          </span>
+                          <span className="text-[10px] text-text-muted">
+                            Комиссия: ${(spread.withdrawFeeUsd || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2 text-right">
                         <span className={clsx('mono-number font-semibold', isHigh ? 'text-accent-green' : 'text-text-secondary')}>
                           {spread.spreadPercent.toFixed(4)}%
                         </span>
@@ -438,9 +451,9 @@ export function SpreadTable({ spreads, loading, changedIds }: SpreadTableProps) 
 
                       <td className="px-3 py-2 text-right">
                         <span className="mono-number text-accent-green text-xs font-semibold">
-                          ${spread.estimatedProfit < 0.01
-                            ? (spread.estimatedProfit || 0).toFixed(4)
-                            : (spread.estimatedProfit || 0).toFixed(2)}
+                          ${spread.netProfit < 0.01
+                            ? (spread.netProfit || 0).toFixed(4)
+                            : (spread.netProfit || 0).toFixed(2)}
                         </span>
                       </td>
                     </tr>
