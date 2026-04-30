@@ -9,7 +9,8 @@ interface StatsCardProps {
   subtitle?: string;
   icon: ReactNode;
   trend?: 'up' | 'down' | 'neutral';
-  accentColor?: 'primary' | 'green' | 'red' | 'amber';
+  accentColor?: 'primary' | 'green' | 'red' | 'amber' | 'muted';
+
   animationDelay?: number;
 }
 
@@ -34,7 +35,13 @@ const accentMap = {
     iconText: 'text-accent-amber',
     glow: 'shadow-[0_0_30px_-5px_rgba(251,191,36,0.15)]',
   },
+  muted: {
+    iconBg: 'bg-white/5',
+    iconText: 'text-text-muted',
+    glow: '',
+  },
 };
+
 
 export function StatsCard({
   title,

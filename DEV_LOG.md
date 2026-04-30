@@ -1,5 +1,20 @@
 # DEV_LOG — CryptoTracker
 
+## 2026-04-30 — Futures Arbitrage Reporting & Data Export
+- **Report Service**: Implemented `ReportService` for generating detailed arbitrage analysis. Includes entry/exit spread calculations, funding differences, and taker fee averaging.
+- **Data Export**: Added `/api/export` endpoint supporting CSV and JSON formats.
+- **Premium UI**: Created `FuturesArbDetails` component that visually replicates (and enhances) professional telegram bot reports. Includes deep-linking to exchanges, funding countdowns, and volume analysis.
+- **New Module**: Added `/reports` page for full-page detailed opportunity analysis.
+- **Sidebar Integration**: Integrated "Reports" into main navigation.
+- **UX Improvements**: Added "Export CSV" button to Alerts page for quick data extraction.
+- **Bug Fixes (Build)**: Fixed pre-existing TypeScript errors related to `ccxt` namespaces and `StatsCard` color types.
+
+## 2026-04-30 — Project Sync & Launch
+
+- **Git Sync**: Pulled latest updates from GitHub. Repository synchronized with latest commits (Funding sorting, Spot fee fixes, etc.).
+- **Server Launch**: Started development server via `npm run dev`.
+- **Verification**: Confirmed dashboard functionality and live data ingestion (195+ pairs, 490+ spreads detected).
+
 ## 2026-04-29 — Funding Sorting & Spot Fee Fixes
 - **Funding Rates**: Implemented multi-column sorting. Users can now click on "Pair" or any Exchange header to sort rates in ascending/descending order. Added visual indicators (arrows) for current sort state.
 - **Spot Bug Fix (Fees)**: Fixed a critical calculation error where exchange taker fees were used as whole numbers (e.g., 0.05) instead of percentage rates (0.0005). This previously resulted in ~4-8% total fees per trade, wiping out all possible arbitrage opportunities.

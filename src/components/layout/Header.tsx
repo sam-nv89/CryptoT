@@ -9,9 +9,12 @@ interface HeaderProps {
   subtitle?: string;
   lastUpdated?: number;
   onRefresh?: () => void;
+  action?: React.ReactNode;
 }
 
-export function Header({ title, subtitle, lastUpdated, onRefresh }: HeaderProps) {
+
+export function Header({ title, subtitle, lastUpdated, onRefresh, action }: HeaderProps) {
+
   const [refreshing, setRefreshing] = useState(false);
 
   const handleRefresh = useCallback(async () => {
@@ -74,7 +77,14 @@ export function Header({ title, subtitle, lastUpdated, onRefresh }: HeaderProps)
             <span className="hidden sm:inline">Обновить</span>
           </button>
         )}
+
+        {action && (
+          <div className="flex items-center">
+            {action}
+          </div>
+        )}
       </div>
+
     </header>
   );
 }

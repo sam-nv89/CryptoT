@@ -23,6 +23,11 @@ CryptoTracker is a high-frequency data ingestion and visualization platform. It 
 ### 4. UI Architecture
 - **Real-time Tables**: High-performance tables with inline filtering and sorting using `useMemo` for efficient rendering of large datasets.
 - **Modular Shell**: A consistent layout with an adaptive sidebar (toggable icons/full view) and state-of-the-art aesthetics.
+- **Views**:
+    - `/dashboard`: Real-time market state and spreads.
+    - `/alerts`: Live signal feed with filtering and sound alerts.
+    - `/reports`: Detailed arbitrage breakdowns (matching pro-bot formats).
+    - `/funding`: Global funding rate matrix.
 
 ## 🛠 Integration Details
 
@@ -34,7 +39,11 @@ To ensure maximum exchange coverage, the service implements:
 
 ## 📁 Directory Structure
 
-- `src/services/`: Core logic for data collection and exchange interactions.
+- `src/services/`: 
+    - `exchange-service.ts`: Core CCXT logic and market discovery.
+    - `alert-engine.ts`: Net-profit math and signal generation.
+    - `report-service.ts`: Detailed reporting and data export logic (CSV/JSON).
+    - `collector.ts`: Background polling orchestration.
 - `src/config/`: Exchange registry, fee structures, and fallback symbols.
 - `src/utils/`: Math utilities, symbol normalization, and formatting.
 - `src/components/`: Reusable UI components (Dashboard, Layout, Shared).

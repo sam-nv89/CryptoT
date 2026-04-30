@@ -12,7 +12,9 @@ import {
   Menu,
   X,
   Zap,
+  FileText,
   ChevronLeft,
+
   ChevronRight,
 } from 'lucide-react';
 import { clsx } from 'clsx';
@@ -29,9 +31,11 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/spot', label: 'Spot Arb', icon: <Zap size={20} /> },
   { href: '/funding', label: 'Funding Rates', icon: <TrendingUp size={20} /> },
   { href: '/alerts', label: 'Alerts', icon: <Bell size={20} /> },
+  { href: '/reports', label: 'Reports', icon: <FileText size={20} /> },
   { href: '/whales', label: 'Whale Tracker', icon: <Wallet size={20} />, badge: 'Soon' },
   { href: '/settings', label: 'Settings', icon: <Settings size={20} /> },
 ];
+
 
 interface SidebarProps {
   isOpen: boolean;

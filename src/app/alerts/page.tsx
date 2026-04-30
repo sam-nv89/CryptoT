@@ -7,7 +7,9 @@ import {
   Clock,
   Target,
   Activity,
+  Download,
 } from 'lucide-react';
+
 import { Header } from '@/components/layout/Header';
 import { StatsCard } from '@/components/ui/StatsCard';
 import { OpportunityCard } from '@/components/alerts/OpportunityCard';
@@ -40,7 +42,17 @@ export default function AlertsPage() {
         subtitle="Автоматическое обнаружение ценовых разниц между биржами"
         lastUpdated={lastChecked}
         onRefresh={refresh}
+        action={
+          <button
+            onClick={() => window.open('/api/export?format=csv', '_blank')}
+            className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 hover:bg-primary-500/20 text-primary-400 border border-primary-500/30 rounded-xl transition-all font-semibold text-sm group"
+          >
+            <Download size={16} className="group-hover:translate-y-0.5 transition-transform" />
+            Выгрузить CSV
+          </button>
+        }
       />
+
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">

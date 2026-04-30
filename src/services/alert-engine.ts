@@ -20,7 +20,8 @@ export interface ExchangeFees {
 }
 
 /** Taker fees per exchange (in %). Taker because arb execution is market-order. */
-export const EXCHANGE_FEES: Record<ExchangeId, ExchangeFees> = {
+export const EXCHANGE_FEES: Partial<Record<ExchangeId, ExchangeFees>> = {
+
   binance:     { maker: 0.02, taker: 0.04 },
   bybit:       { maker: 0.01, taker: 0.06 },
   okx:         { maker: 0.02, taker: 0.05 },

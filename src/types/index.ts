@@ -194,6 +194,32 @@ export interface DashboardFilters {
 
 // === API Response wrapper ===
 
+// === Futures Arbitrage Report (Export) ===
+
+export interface ExchangePositionReport {
+  exchange: ExchangeId;
+  fundingRate: number;
+  fundingForecast?: number;
+  url: string;
+  nextFundingTime: number;
+  ask: number;
+  bid: number;
+  takerFee: number;
+  volume24h: number;
+  timeframe: string;
+}
+
+export interface FuturesArbitrageReport {
+  symbol: string;
+  shortPosition: ExchangePositionReport;
+  longPosition: ExchangePositionReport;
+  avgTakerFee: number;
+  entrySpread: number;
+  exitSpread: number;
+  fundingDiff: number;
+  timestamp: number;
+}
+
 export interface ApiResponse<T> {
   data: T;
   timestamp: number;
@@ -205,3 +231,4 @@ export interface ApiError {
   message: string;
   details?: string;
 }
+

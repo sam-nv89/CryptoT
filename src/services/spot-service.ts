@@ -100,8 +100,8 @@ export async function fetchSpotTickers(symbols: string[]): Promise<TickerData[]>
 
     try {
       const exchange = getSpotInstance(exchangeId);
-      let tickers: ccxt.Dictionary<ccxt.Ticker> = {};
-      let bidsAsks: ccxt.Dictionary<ccxt.Ticker> = {};
+      let tickers: Record<string, any> = {};
+      let bidsAsks: Record<string, any> = {};
 
       try {
         const [t, b] = await Promise.all([
@@ -109,7 +109,8 @@ export async function fetchSpotTickers(symbols: string[]): Promise<TickerData[]>
           exchange.has['fetchBidsAsks'] ? exchange.fetchBidsAsks().catch(() => ({})) : Promise.resolve({})
         ]);
         tickers = t;
-        bidsAsks = b as ccxt.Dictionary<ccxt.Ticker>;
+        bidsAsks = b as Record<string, any>;
+
       } catch {
         return; // Fallback skipped for brevity in spot
       }

@@ -202,8 +202,9 @@ export async function fetchTickers(): Promise<TickerData[]> {
         const exchange = getExchangeInstance(ccxtId);
 
         // Try fetching ALL tickers (most efficient, 1 API call)
-        let tickers: ccxt.Dictionary<ccxt.Ticker> = {};
-        let bidsAsks: ccxt.Dictionary<ccxt.Ticker> = {};
+        let tickers: Record<string, any> = {};
+        let bidsAsks: Record<string, any> = {};
+
 
         try {
           const [t, b] = await Promise.all([
@@ -211,7 +212,8 @@ export async function fetchTickers(): Promise<TickerData[]> {
             exchange.has['fetchBidsAsks'] ? exchange.fetchBidsAsks().catch(() => ({})) : Promise.resolve({})
           ]);
           tickers = t;
-          bidsAsks = b as ccxt.Dictionary<ccxt.Ticker>;
+          bidsAsks = b as Record<string, any>;
+
         } catch {
           // Fallback: fetch specific symbols in batch
           try {
@@ -221,7 +223,8 @@ export async function fetchTickers(): Promise<TickerData[]> {
               exchange.has['fetchBidsAsks'] ? exchange.fetchBidsAsks(symArray).catch(() => ({})) : Promise.resolve({})
             ]);
             tickers = t;
-            bidsAsks = b as ccxt.Dictionary<ccxt.Ticker>;
+            bidsAsks = b as Record<string, any>;
+
           } catch (e) {
             // Last resort: skip this exchange this cycle
             console.warn(`[ExchangeService] ${exchangeId}: fetchTickers/BidsAsks failed`, (e as Error).message);
