@@ -269,11 +269,44 @@ export async function fetchTickers(): Promise<TickerData[]> {
 
 // === Funding Rate Fetching ===
 
+function processFundingRate(exchangeId: string, symbol: string, fr: any, results: FundingRateEntry[]) {
+  if (fr.fundingRate !== undefined && fr.fundingRate !== null) {
+    const rate = fr.fundingRate;
+    
+    // Determine interval (default to 8h if unknown)
+    // CCXT sometimes provides 'info.interval' or similar in raw response
+    let intervalHours = 8;
+    try {
+      const rawInterval = fr.info?.interval || fr.info?.fundingInterval || fr.info?.nextFundingInterval;
+      if (rawInterval) {
+        if (typeof rawInterval === 'string' && rawInterval.includes('h')) {
+          intervalHours = parseInt(rawInterval) || 8;
+        } else if (typeof rawInterval === 'number') {
+          // If in ms or seconds, convert to hours
+          if (rawInterval > 100000) intervalHours = Math.round(rawInterval / (1000 * 60 * 60));
+          else if (rawInterval > 0) intervalHours = Math.round(rawInterval / 3600);
+        }
+      }
+    } catch { /* fallback to 8 */ }
+
+    const annualized = rate * (24 / intervalHours) * 365 * 100;
+
+    results.push({
+      exchange: exchangeId as ExchangeId,
+      symbol,
+      rate,
+      annualizedRate: annualized,
+      nextFundingTime: fr.fundingTimestamp ?? fr.nextFundingTimestamp ?? 0,
+      timestamp: fr.timestamp ?? Date.now(),
+      nextRate: fr.nextFundingRate ?? fr.estimatedFundingRate ?? undefined,
+    });
+  }
+}
+
 export async function fetchFundingRates(): Promise<FundingRateEntry[]> {
   const results: FundingRateEntry[] = [];
   const trackedSymbols = dataCache.getDiscoveredSymbols();
-  // Only fetch funding for top symbols (funding is expensive per-symbol)
-  const fundingSymbols = (trackedSymbols.length > 0 ? trackedSymbols : [...FALLBACK_SYMBOLS]).slice(0, 30);
+  const fundingSymbols = (trackedSymbols.length > 0 ? trackedSymbols : [...FALLBACK_SYMBOLS]);
 
   const tasks = Object.entries(CCXT_EXCHANGE_IDS).map(
     async ([exchangeId, ccxtId]) => {
@@ -282,29 +315,35 @@ export async function fetchFundingRates(): Promise<FundingRateEntry[]> {
       try {
         const exchange = getExchangeInstance(ccxtId);
 
-        for (const symbol of fundingSymbols) {
+        // 1. Try Batch Fetching (much faster)
+        if (exchange.has['fetchFundingRates']) {
+          try {
+            // Some exchanges take a list of symbols, others take none to get all
+            const rates = await (['binance', 'bybit', 'okx', 'gate', 'bitget'].includes(exchangeId)
+              ? exchange.fetchFundingRates(fundingSymbols.slice(0, 100)) 
+              : exchange.fetchFundingRates());
+            
+            for (const [symbol, fr] of Object.entries(rates)) {
+              processFundingRate(exchangeId, symbol, fr, results);
+            }
+            return;
+          } catch (e) {
+            console.warn(`[ExchangeService] ${exchangeId} batch funding failed, falling back`, (e as Error).message);
+          }
+        }
+
+        // 2. Sequential Fallback (limited to top 20 to avoid rate limits/timeouts)
+        const limitedSymbols = fundingSymbols.slice(0, 20);
+        for (const symbol of limitedSymbols) {
           try {
             const fr = await exchange.fetchFundingRate(symbol);
-
-            if (fr.fundingRate !== undefined && fr.fundingRate !== null) {
-              const rate = fr.fundingRate;
-              const annualized = rate * 3 * 365 * 100;
-
-              results.push({
-                exchange: exchangeId as ExchangeId,
-                symbol,
-                rate,
-                annualizedRate: annualized,
-                nextFundingTime: fr.fundingTimestamp ?? 0,
-                timestamp: fr.timestamp ?? Date.now(),
-              });
-            }
+            processFundingRate(exchangeId, symbol, fr, results);
           } catch {
-            // Symbol may not be listed on this exchange
+            // Ignore missing symbols
           }
         }
       } catch (err) {
-        console.error(`[ExchangeService] Funding fetch failed for ${exchangeId}:`, err);
+        console.error(`[ExchangeService] Funding fetch failed for ${exchangeId}:`, (err as Error).message);
       }
     }
   );

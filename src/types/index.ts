@@ -127,6 +127,9 @@ export interface FundingRateEntry {
   annualizedRate: number;
   nextFundingTime: number;
   timestamp: number;
+  price?: number;
+  volume24h?: number;
+  nextRate?: number;
 }
 
 export interface FundingComparison {

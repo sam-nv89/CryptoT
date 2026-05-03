@@ -39,10 +39,29 @@ export async function runCollectionCycle(): Promise<{
       ...(hlData.status === 'fulfilled' ? hlData.value.tickers : []),
     ];
 
-    const allFunding = [
+    let allFunding = [
       ...(cexFunding.status === 'fulfilled' ? cexFunding.value : []),
       ...(hlData.status === 'fulfilled' ? hlData.value.funding : []),
     ];
+
+    // OMNI-MERGE: Attach price and volume to funding entries
+    // Create a map for O(1) lookup
+    const tickerMap = new Map<string, TickerData>();
+    for (const t of allTickers) {
+      tickerMap.set(`${t.exchange}:${t.symbol}`, t);
+    }
+
+    allFunding = allFunding.map(f => {
+      const ticker = tickerMap.get(`${f.exchange}:${f.symbol}`);
+      if (ticker) {
+        return {
+          ...f,
+          price: ticker.last,
+          volume24h: ticker.volume24h,
+        };
+      }
+      return f;
+    });
 
     // Calculate spreads
     const spreads = calculateSpreads(allTickers);

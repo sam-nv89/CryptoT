@@ -96,7 +96,8 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border/70">
-                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Пара</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider">Пара / Цена</th>
+                <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider">Объем 24ч</th>
                 {exchangeIds.map((ex) => (
                   <th key={ex} className="px-4 py-3 text-center text-xs font-medium text-text-muted uppercase tracking-wider">
                     {EXCHANGES[ex].name}
@@ -153,12 +154,15 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
           <thead>
             <tr className="border-b border-border/70">
               <th 
-                className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider w-[120px] cursor-pointer hover:text-text-primary transition-colors"
+                className="px-4 py-3 text-left text-xs font-medium text-text-muted uppercase tracking-wider w-[140px] cursor-pointer hover:text-text-primary transition-colors"
                 onClick={() => toggleSort('symbol')}
               >
                 <div className="flex items-center gap-1">
-                  Пара <SortIcon col="symbol" />
+                  Пара / Цена <SortIcon col="symbol" />
                 </div>
+              </th>
+              <th className="px-4 py-3 text-right text-xs font-medium text-text-muted uppercase tracking-wider w-[100px]">
+                Объем 24ч
               </th>
               {exchangeIds.map((ex) => (
                 <th 
@@ -189,6 +193,9 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
               const allRates = Object.values(row).filter(Boolean).map((r) => r!.rate);
               const maxRate = Math.max(...allRates);
               const minRate = Math.min(...allRates);
+              
+              // Find first entry to get price/volume (they should be roughly the same across exchanges)
+              const firstEntry = Object.values(row).find(e => !!e);
 
               return (
                 <tr
@@ -200,9 +207,30 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
                   style={{ animationDelay: `${idx * 0.04}s`, animationFillMode: 'forwards' }}
                 >
                   <td className="px-4 py-3">
-                    <span className="font-semibold text-text-primary mono-number">
-                      {formatSymbol(symbol)}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-text-primary mono-number">
+                        {formatSymbol(symbol)}
+                      </span>
+                      {firstEntry?.price && (
+                        <span className="text-[10px] text-text-muted mt-0.5">
+                          ${firstEntry.price < 0.1 
+                            ? firstEntry.price.toFixed(6) 
+                            : firstEntry.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+
+                  <td className="px-4 py-3 text-right">
+                    {firstEntry?.volume24h ? (
+                      <span className="text-xs text-text-secondary mono-number">
+                        ${firstEntry.volume24h >= 1_000_000 
+                          ? `${(firstEntry.volume24h / 1_000_000).toFixed(1)}M` 
+                          : `${(firstEntry.volume24h / 1_000).toFixed(0)}K`}
+                      </span>
+                    ) : (
+                      <span className="text-text-muted">—</span>
+                    )}
                   </td>
 
                   {exchangeIds.map((ex) => {
@@ -224,7 +252,7 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
                       <td key={ex} className="px-4 py-3 text-center">
                         <div
                           className={clsx(
-                            'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg',
+                            'inline-flex items-center gap-1 px-2 py-0.5 rounded-md mb-1',
                             isPositive
                               ? 'bg-accent-green/8 text-accent-green'
                               : 'bg-accent-red/8 text-accent-red',
@@ -232,18 +260,23 @@ export function FundingTable({ rates, loading }: FundingTableProps) {
                             isMin && 'ring-1 ring-accent-red/30'
                           )}
                         >
-                          {isPositive ? (
-                            <TrendingUp size={12} />
-                          ) : (
-                            <TrendingDown size={12} />
-                          )}
-                          <span className="mono-number text-xs font-semibold">
+                          <span className="mono-number text-[11px] font-bold">
                             {ratePercent}%
                           </span>
                         </div>
-                        <p className="text-[10px] text-text-muted mt-0.5">
-                          ≈ {entry.annualizedRate.toFixed(1)}% APR
-                        </p>
+                        <div className="flex flex-col items-center leading-tight">
+                          <span className="text-[9px] text-text-muted font-medium">
+                            {entry.annualizedRate.toFixed(1)}% APR
+                          </span>
+                          {entry.nextRate !== undefined && (
+                            <span className={clsx(
+                              'text-[9px] mt-0.5 px-1 rounded bg-bg-secondary border border-border/50',
+                              entry.nextRate >= 0 ? 'text-accent-green/70' : 'text-accent-red/70'
+                            )}>
+                              Next: {(entry.nextRate * 100).toFixed(4)}%
+                            </span>
+                          )}
+                        </div>
                       </td>
                     );
                   })}

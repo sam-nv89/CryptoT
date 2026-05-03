@@ -1,5 +1,22 @@
 # DEV_LOG — CryptoTracker
 
+## 2026-05-03 — Funding Rates Quality & Data Enrichment
+- **Data Model**: Updated `FundingRateEntry` to include `price`, `volume24h`, and `nextRate` (predicted).
+- **Optimization**: Implemented batch fetching for funding rates on major exchanges (Binance, Bybit, OKX, Gate, Bitget), significantly increasing coverage and speed.
+- **Accuracy**: Added dynamic interval detection (1h, 4h, 8h) for precise APR calculation.
+- **Data Merging**: Enhanced `Collector` to synchronize funding rates with ticker data, providing real-time market context.
+- **UI Overhaul**: Updated `FundingTable` with new columns for Price and Volume, and added "Next Rate" forecasting indicators.
+
+## 2026-05-03 — Project Update & Server Launch
+- **GitHub Update**: Pulled latest changes from the repository.
+  - New Features: Integrated `ReportService` and a dedicated Reports page.
+  - Enhancements: Improved `Header`, `Sidebar`, and `StatsCard` components.
+  - Utilities: Added `src/utils/urls.ts` for centralized URL management.
+  - Export: Implemented API route for data export (`/api/export`).
+- **Dependencies**: Verified and updated all npm packages.
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Status**: System is up to date and running in development mode.
+
 ## 2026-04-30 — Futures Arbitrage Reporting & Data Export
 - **Report Service**: Implemented `ReportService` for generating detailed arbitrage analysis. Includes entry/exit spread calculations, funding differences, and taker fee averaging.
 - **Data Export**: Added `/api/export` endpoint supporting CSV and JSON formats.
