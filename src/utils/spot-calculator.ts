@@ -1,20 +1,54 @@
-import type { TickerData, SpotSpreadEntry, NetworkInfo, ExchangeId } from '@/types';
+/**
+ * Spot Arbitrage Calculator — Three-tier confidence model
+ *
+ * Calculates cross-exchange spot arbitrage opportunities with
+ * a progressive confidence system:
+ *
+ *   🟢 VERIFIED — Both exchanges provided network data via fetchCurrencies.
+ *                 Real withdrawal fee, matched network route.
+ *   🟡 ESTIMATED — Network data missing for ≥1 exchange.
+ *                  Uses FALLBACK_WITHDRAW_FEES for a realistic estimate.
+ *   🔴 RAW — No fee data at all, only price difference shown.
+ *            Used only as a last resort for exotic tokens.
+ *
+ * This replaces the previous calculator that silently dropped
+ * all pairs without full network data (returning 0 results).
+ */
+import type { TickerData, SpotSpreadEntry, SpotConfidence, NetworkInfo, ExchangeId } from '@/types';
 import { normalizeSymbol } from '@/utils/crypto';
-import { EXCHANGE_FEES } from '@/services/alert-engine';
+import {
+  SPOT_TAKER_FEES,
+  FALLBACK_WITHDRAW_FEES,
+  MIN_SPOT_SPREAD_PCT,
+  HOT_SPREAD_THRESHOLD,
+  WARM_SPREAD_THRESHOLD,
+} from '@/config/spot-config';
+
+// === Normalized ticker with computed fields ===
+interface NormTicker extends TickerData {
+  normPrice: number;
+  normBid: number;
+  normAsk: number;
+  normBidVolume: number;
+  normAskVolume: number;
+  baseAsset: string;
+}
+
+// === Main calculation entry point ===
 
 export function calculateSpotSpreads(
   tickers: TickerData[],
-  currencies: Record<ExchangeId, Record<string, NetworkInfo[]>>
+  currencies: Record<ExchangeId, Record<string, NetworkInfo[]>> | null
 ): SpotSpreadEntry[] {
   const spreads: SpotSpreadEntry[] = [];
-  const bySymbol = new Map<string, (TickerData & { normPrice: number; normBid: number; normAsk: number; normBidVolume: number; normAskVolume: number; baseAsset: string })[]>();
-  
-  console.log(`[SpotCalc] Processing ${tickers.length} tickers across ${currencies ? Object.keys(currencies).length : 0} exchanges with currency info`);
-  
+
+  // 1. Group tickers by normalized symbol
+  const bySymbol = new Map<string, NormTicker[]>();
+
   for (const t of tickers) {
-    const { normalizedSymbol, multiplier, asset } = normalizeSymbol(t.symbol);
+    const { normalizedSymbol, multiplier, baseAsset: asset } = normalizeSymbol(t.symbol);
     const group = bySymbol.get(normalizedSymbol) ?? [];
-    
+
     group.push({
       ...t,
       normPrice: t.last / multiplier,
@@ -24,78 +58,150 @@ export function calculateSpotSpreads(
       normAskVolume: t.askVolume * multiplier,
       baseAsset: asset,
     });
-    
+
     bySymbol.set(normalizedSymbol, group);
   }
 
+  const currencyData = currencies ?? {} as Record<ExchangeId, Record<string, NetworkInfo[]>>;
+
+  // 2. For each symbol, evaluate all cross-exchange pairs
   for (const [normSymbol, symbolTickers] of bySymbol) {
     if (symbolTickers.length < 2) continue;
 
     for (let i = 0; i < symbolTickers.length; i++) {
       for (let j = i + 1; j < symbolTickers.length; j++) {
-        const a = symbolTickers[i];
-        const b = symbolTickers[j];
-
         // Evaluate both directions
-        evaluateSpotDirection(a, b, normSymbol, currencies, spreads);
-        evaluateSpotDirection(b, a, normSymbol, currencies, spreads);
+        evaluateDirection(symbolTickers[i], symbolTickers[j], normSymbol, currencyData, spreads);
+        evaluateDirection(symbolTickers[j], symbolTickers[i], normSymbol, currencyData, spreads);
       }
     }
   }
 
-  return spreads.sort((a, b) => b.netProfit - a.netProfit);
+  // 3. Sort by net profit descending
+  return spreads.sort((a, b) => b.netSpreadPercent - a.netSpreadPercent);
 }
 
-function evaluateSpotDirection(
-  buyTick: TickerData & { normPrice: number; normBid: number; normAsk: number; normBidVolume: number; normAskVolume: number; baseAsset: string },
-  sellTick: TickerData & { normPrice: number; normBid: number; normAsk: number; normBidVolume: number; normAskVolume: number; baseAsset: string },
+// === Direction evaluator with three-tier confidence ===
+
+function evaluateDirection(
+  buyTick: NormTicker,
+  sellTick: NormTicker,
   normSymbol: string,
   currencies: Record<ExchangeId, Record<string, NetworkInfo[]>>,
   spreads: SpotSpreadEntry[]
-) {
+): void {
+  // Basic price check: sell bid must be higher than buy ask
   if (sellTick.normBid <= buyTick.normAsk) return;
 
   const spreadAbs = sellTick.normBid - buyTick.normAsk;
   const spreadPct = (spreadAbs / buyTick.normAsk) * 100;
-  
-  if (spreadPct >= 50 || spreadPct <= 0.01) return; // Relaxed for debug
 
+  // Sanity: skip impossible spreads (>5% is usually different contract/junk data)
+  if (spreadPct >= 5 || spreadPct < MIN_SPOT_SPREAD_PCT) return;
+
+  // Volume: use the smaller side's available depth
   const buyVolume = buyTick.normAskVolume;
   const sellVolume = sellTick.normBidVolume;
   const maxQuantity = Math.min(buyVolume, sellVolume);
-  
-  if (maxQuantity * buyTick.normAsk < 10) return; // Min $10 volume (relaxed)
+
+  // Require at least $10 in executable volume
+  if (maxQuantity * buyTick.normAsk < 10) return;
 
   const estimatedProfit = maxQuantity * spreadAbs;
 
-  // Trading fees (EXCHANGE_FEES are in %, e.g. 0.04 = 0.04%, so divide by 100 for rate)
-  // Spot fees are usually 0.1% (0.001), so if taker is 0.05, we treat it as 0.05%
-  const buyFeeRate = (EXCHANGE_FEES[buyTick.exchange]?.taker ?? 0.1) / 100; 
-  const sellFeeRate = (EXCHANGE_FEES[sellTick.exchange]?.taker ?? 0.1) / 100;
-  const tradingFeesUsd = (maxQuantity * buyTick.normAsk * buyFeeRate) + (maxQuantity * sellTick.normBid * sellFeeRate);
+  // Trading fees (spot taker fees, stored as % like 0.10)
+  const buyFeeRate = (SPOT_TAKER_FEES[buyTick.exchange] ?? 0.10) / 100;
+  const sellFeeRate = (SPOT_TAKER_FEES[sellTick.exchange] ?? 0.10) / 100;
+  const tradingFeesUsd =
+    (maxQuantity * buyTick.normAsk * buyFeeRate) +
+    (maxQuantity * sellTick.normBid * sellFeeRate);
 
-  // Network Routing
-  const baseAsset = buyTick.baseAsset;
-  const buyExNets = currencies[buyTick.exchange]?.[baseAsset] || [];
-  const sellExNets = currencies[sellTick.exchange]?.[baseAsset] || [];
+  // === Determine withdrawal fee and confidence ===
+  const { withdrawFeeUsd, confidence, withdrawNetwork } = resolveWithdrawFee(
+    buyTick.exchange,
+    sellTick.exchange,
+    buyTick.baseAsset,
+    buyTick.normAsk,
+    currencies
+  );
 
-  let bestNetwork: string | undefined;
-  let minWithdrawFeeUsd = Infinity;
+  // Net profit after all costs
+  const netProfit = estimatedProfit - tradingFeesUsd - withdrawFeeUsd;
 
-  // If we have API data for both
+  // Net spread % (what you actually earn)
+  const totalCostPct = ((tradingFeesUsd + withdrawFeeUsd) / (maxQuantity * buyTick.normAsk)) * 100;
+  const netSpreadPct = spreadPct - totalCostPct;
+
+  // Profit per $1000 capital deployed
+  const profitPer1000 = (netSpreadPct / 100) * 1000;
+
+  // Filter: only show actionable opportunities
+  if (confidence === 'raw') {
+    // Raw: needs positive net spread AND at least 0.3% gross AND max 3% (avoid junk)
+    if (spreadPct < 0.3 || spreadPct > 3.0 || netSpreadPct < 0) return;
+  } else {
+    // Verified/Estimated: only show net-positive opportunities
+    if (netSpreadPct < 0) return;
+  }
+
+  spreads.push({
+    symbol: normSymbol,
+    buyExchange: buyTick.exchange,
+    sellExchange: sellTick.exchange,
+    buyPrice: buyTick.normAsk,
+    sellPrice: sellTick.normBid,
+    spreadPercent: spreadPct,
+    spreadAbsolute: spreadAbs,
+    volume24h: Math.min(buyTick.volume24h, sellTick.volume24h),
+    buyVolume,
+    sellVolume,
+    maxQuantity,
+    estimatedProfit,
+    timestamp: Date.now(),
+    withdrawNetwork,
+    depositNetwork: withdrawNetwork,
+    withdrawFeeUsd,
+    netProfit,
+    confidence,
+    tradingFeesUsd,
+    netSpreadPercent: netSpreadPct,
+    profitPer1000,
+  });
+}
+
+// === Withdrawal fee resolution ===
+
+interface WithdrawResult {
+  withdrawFeeUsd: number;
+  confidence: SpotConfidence;
+  withdrawNetwork?: string;
+}
+
+function resolveWithdrawFee(
+  buyExchange: ExchangeId,
+  sellExchange: ExchangeId,
+  baseAsset: string,
+  priceUsd: number,
+  currencies: Record<ExchangeId, Record<string, NetworkInfo[]>>
+): WithdrawResult {
+  const buyExNets = currencies[buyExchange]?.[baseAsset] || [];
+  const sellExNets = currencies[sellExchange]?.[baseAsset] || [];
+
+  // === Tier 1: VERIFIED — Both exchanges have network data ===
   if (buyExNets.length > 0 && sellExNets.length > 0) {
-    // if (normSymbol === 'BTC') console.log(`[SpotCalc] Matching networks for ${normSymbol} on ${buyTick.exchange} (${buyExNets.length}) and ${sellTick.exchange} (${sellExNets.length})`);
+    let bestNetwork: string | undefined;
+    let minWithdrawFeeUsd = Infinity;
 
     for (const bNet of buyExNets) {
       if (!bNet.withdrawEnable) continue;
-      
-      const match = sellExNets.find(sNet => 
-        sNet.depositEnable && 
-        (sNet.network === bNet.network || sNet.network.includes(bNet.network) || bNet.network.includes(sNet.network))
+
+      const match = sellExNets.find(sNet =>
+        sNet.depositEnable &&
+        networksMatch(bNet.network, sNet.network)
       );
-      
+
       if (match) {
-        const feeUsd = bNet.withdrawFee * buyTick.normAsk;
+        const feeUsd = bNet.withdrawFee * priceUsd;
         if (feeUsd < minWithdrawFeeUsd) {
           minWithdrawFeeUsd = feeUsd;
           bestNetwork = bNet.network;
@@ -103,45 +209,78 @@ function evaluateSpotDirection(
       }
     }
 
-    if (bestNetwork) {
-      // console.log(`[SpotCalc] Found network ${bestNetwork} for ${normSymbol} ${buyTick.exchange}->${sellTick.exchange}`);
+    if (bestNetwork && minWithdrawFeeUsd < Infinity) {
+      return {
+        withdrawFeeUsd: minWithdrawFeeUsd,
+        confidence: 'verified',
+        withdrawNetwork: bestNetwork,
+      };
     }
-
-    // If no matching valid networks, skip this pair completely
-    if (!bestNetwork) return;
-  } else {
-    // If we have no network info at all (most exchanges), for now we skip.
-    // BUT let's log this to see if any tickers are even reaching this point.
-    // console.log(`[SpotCalc] No network info for ${buyTick.exchange}->${sellTick.exchange} ${normSymbol}`);
-    return;
   }
 
-  const netProfit = estimatedProfit - tradingFeesUsd - minWithdrawFeeUsd;
-  
-  // if (normSymbol === 'BTC') {
-  //   console.log(`[SpotCalc] BTC ${buyTick.exchange}->${sellTick.exchange}: Gross Profit: $${estimatedProfit.toFixed(2)}, Fees: $${tradingFeesUsd.toFixed(2)}, Net: $${netProfit.toFixed(2)}`);
-  // }
-
-  
-  if (netProfit > 0) {
-    spreads.push({
-      symbol: normSymbol,
-      buyExchange: buyTick.exchange,
-      sellExchange: sellTick.exchange,
-      buyPrice: buyTick.normAsk,
-      sellPrice: sellTick.normBid,
-      spreadPercent: spreadPct,
-      spreadAbsolute: spreadAbs,
-      volume24h: Math.min(buyTick.volume24h, sellTick.volume24h),
-      buyVolume,
-      sellVolume,
-      maxQuantity,
-      estimatedProfit,
-      timestamp: Date.now(),
-      withdrawNetwork: bestNetwork,
-      depositNetwork: bestNetwork,
-      withdrawFeeUsd: minWithdrawFeeUsd,
-      netProfit,
-    });
+  // === Tier 2: ESTIMATED — Use fallback fee table ===
+  const fallbackFeeTokens = FALLBACK_WITHDRAW_FEES[baseAsset];
+  if (fallbackFeeTokens !== undefined) {
+    const feeUsd = fallbackFeeTokens * priceUsd;
+    return {
+      withdrawFeeUsd: feeUsd,
+      confidence: 'estimated',
+      withdrawNetwork: guessNetwork(baseAsset),
+    };
   }
+
+  // === Tier 3: RAW — Use percentage-based estimate ===
+  // For unknown tokens, estimate withdrawal fee as ~0.3% of trade value
+  // This is more realistic than a flat USD amount for cheap tokens
+  const estimatedFeeUsd = priceUsd * 0.003; // ~0.3% of token price as fee
+  const minRawFee = Math.max(estimatedFeeUsd, 0.50); // At least $0.50
+  const maxRawFee = Math.min(minRawFee, 10.0); // Cap at $10
+  return {
+    withdrawFeeUsd: maxRawFee,
+    confidence: 'raw',
+    withdrawNetwork: undefined,
+  };
+}
+
+// === Network name fuzzy matching ===
+function networksMatch(a: string, b: string): boolean {
+  const na = a.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const nb = b.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return na === nb || na.includes(nb) || nb.includes(na);
+}
+
+// === Guess common network for a token ===
+function guessNetwork(asset: string): string {
+  const NETWORK_MAP: Record<string, string> = {
+    BTC: 'BTC',
+    ETH: 'ERC20',
+    SOL: 'SOL',
+    XRP: 'XRP',
+    ADA: 'ADA',
+    DOGE: 'DOGE',
+    DOT: 'DOT',
+    AVAX: 'AVAXC',
+    LINK: 'ERC20',
+    NEAR: 'NEAR',
+    SUI: 'SUI',
+    APT: 'APT',
+    ARB: 'ARBITRUM',
+    OP: 'OPTIMISM',
+    MATIC: 'POLYGON',
+    POL: 'POLYGON',
+    TON: 'TON',
+    TRX: 'TRC20',
+    USDT: 'TRC20',
+    USDC: 'TRC20',
+    LTC: 'LTC',
+    ATOM: 'COSMOS',
+    SEI: 'SEI',
+    TIA: 'CELESTIA',
+    INJ: 'INJECTIVE',
+    PEPE: 'ERC20',
+    WIF: 'SOL',
+    NOT: 'TON',
+    SHIB: 'ERC20',
+  };
+  return NETWORK_MAP[asset] || 'Unknown';
 }

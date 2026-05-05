@@ -2,9 +2,26 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type {
-  SpotSpreadEntry,
+  SpotSpreadEntry, SpotConfidence,
   RefreshConfig, RefreshIntervalOption,
 } from '@/types';
+import { HOT_SPREAD_THRESHOLD, WARM_SPREAD_THRESHOLD } from '@/config/spot-config';
+
+// === Types ===
+
+interface SpotStats {
+  totalSpreads: number;
+  verifiedCount: number;
+  estimatedCount: number;
+  rawCount: number;
+  hotCount: number;
+  warmCount: number;
+  bestSpreadPct: number;
+  bestProfitPer1000: number;
+  uniqueSymbols: number;
+  activeExchanges: number;
+  avgSpreadPct: number;
+}
 
 interface UseSpotDataReturn {
   spreads: SpotSpreadEntry[];
@@ -17,13 +34,81 @@ interface UseSpotDataReturn {
   setAutoRefresh: (enabled: boolean) => void;
   setRefreshInterval: (seconds: RefreshIntervalOption) => void;
   changedSpreadIds: Set<string>;
-  symbolCount: number;
-  exchangeCount: number;
+  stats: SpotStats;
+  soundEnabled: boolean;
+  setSoundEnabled: (enabled: boolean) => void;
 }
 
+// === Unique ID for a spread ===
 function spreadUid(s: SpotSpreadEntry): string {
   return `${s.symbol}::${s.buyExchange}->${s.sellExchange}`;
 }
+
+// === Compute stats from spreads ===
+function computeStats(spreads: SpotSpreadEntry[]): SpotStats {
+  const symbols = new Set<string>();
+  const exchanges = new Set<string>();
+  let verifiedCount = 0;
+  let estimatedCount = 0;
+  let rawCount = 0;
+  let hotCount = 0;
+  let warmCount = 0;
+  let sumSpread = 0;
+
+  for (const s of spreads) {
+    symbols.add(s.symbol);
+    exchanges.add(s.buyExchange);
+    exchanges.add(s.sellExchange);
+    sumSpread += s.spreadPercent;
+
+    if (s.confidence === 'verified') verifiedCount++;
+    else if (s.confidence === 'estimated') estimatedCount++;
+    else rawCount++;
+
+    if (s.spreadPercent >= HOT_SPREAD_THRESHOLD) hotCount++;
+    else if (s.spreadPercent >= WARM_SPREAD_THRESHOLD) warmCount++;
+  }
+
+  return {
+    totalSpreads: spreads.length,
+    verifiedCount,
+    estimatedCount,
+    rawCount,
+    hotCount,
+    warmCount,
+    bestSpreadPct: spreads.length > 0 ? Math.max(...spreads.map(s => s.spreadPercent)) : 0,
+    bestProfitPer1000: spreads.length > 0 ? Math.max(...spreads.map(s => s.profitPer1000)) : 0,
+    uniqueSymbols: symbols.size,
+    activeExchanges: exchanges.size,
+    avgSpreadPct: spreads.length > 0 ? sumSpread / spreads.length : 0,
+  };
+}
+
+// === Audio notification ===
+function playHotSignalSound() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    // Two-tone chime
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1100, ctx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+
+    osc.start();
+    osc.stop(ctx.currentTime + 0.3);
+
+    setTimeout(() => ctx.close(), 500);
+  } catch {
+    // Audio not available (SSR or restricted)
+  }
+}
+
+// === Main Hook ===
 
 export function useSpotData(): UseSpotDataReturn {
   const [spreads, setSpreads] = useState<SpotSpreadEntry[]>([]);
@@ -32,16 +117,19 @@ export function useSpotData(): UseSpotDataReturn {
   const [lastUpdated, setLastUpdated] = useState(0);
   const [dataAgeSec, setDataAgeSec] = useState(0);
   const [changedSpreadIds, setChangedSpreadIds] = useState<Set<string>>(new Set());
+  const [soundEnabled, setSoundEnabled] = useState(false);
 
   const [refreshConfig, setRefreshConfig] = useState<RefreshConfig>({
     autoRefresh: true,
-    intervalSeconds: 30, // Spot is heavier, slower refresh
+    intervalSeconds: 30,
   });
 
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const ageIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const prevSpreadMapRef = useRef<Map<string, number>>(new Map());
+  const prevHotCountRef = useRef(0);
 
+  // Data age ticker
   useEffect(() => {
     ageIntervalRef.current = setInterval(() => {
       if (lastUpdated > 0) {
@@ -53,6 +141,7 @@ export function useSpotData(): UseSpotDataReturn {
     };
   }, [lastUpdated]);
 
+  // Fetch spot data
   const fetchSpot = useCallback(async (isInitial = false) => {
     if (isInitial) setLoading(true);
     setError(null);
@@ -75,6 +164,13 @@ export function useSpotData(): UseSpotDataReturn {
           }
         }
 
+        // Sound notification for new HOT signals
+        const newHotCount = newSpreads.filter(s => s.spreadPercent >= HOT_SPREAD_THRESHOLD).length;
+        if (soundEnabled && newHotCount > prevHotCountRef.current && prevHotCountRef.current >= 0) {
+          playHotSignalSound();
+        }
+        prevHotCountRef.current = newHotCount;
+
         prevSpreadMapRef.current = newMap;
         setChangedSpreadIds(changed);
         setSpreads(newSpreads);
@@ -84,55 +180,54 @@ export function useSpotData(): UseSpotDataReturn {
         }
       }
 
-      setLastUpdated(Date.now());
+      setLastUpdated(json.timestamp || Date.now());
       setDataAgeSec(0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch spot data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [soundEnabled]);
 
   const refresh = useCallback(() => {
     fetchSpot(false);
   }, [fetchSpot]);
 
   const setAutoRefresh = useCallback((enabled: boolean) => {
-    setRefreshConfig((prev) => ({ ...prev, autoRefresh: enabled }));
+    setRefreshConfig(prev => ({ ...prev, autoRefresh: enabled }));
   }, []);
 
   const setRefreshInterval = useCallback((seconds: RefreshIntervalOption) => {
-    setRefreshConfig((prev) => ({ ...prev, intervalSeconds: seconds }));
+    setRefreshConfig(prev => ({ ...prev, intervalSeconds: seconds }));
   }, []);
 
+  // Initial fetch
   useEffect(() => {
     fetchSpot(true);
   }, [fetchSpot]);
 
+  // Auto-refresh
   useEffect(() => {
     if (intervalRef.current) clearInterval(intervalRef.current);
     if (refreshConfig.autoRefresh) {
-      intervalRef.current = setInterval(() => fetchSpot(false), refreshConfig.intervalSeconds * 1000);
+      intervalRef.current = setInterval(
+        () => fetchSpot(false),
+        refreshConfig.intervalSeconds * 1000
+      );
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [refreshConfig.autoRefresh, refreshConfig.intervalSeconds, fetchSpot]);
 
-  const symbolCount = useMemo(() => new Set(spreads.map((s) => s.symbol)).size, [spreads]);
-  const exchangeCount = useMemo(() => {
-    const exSet = new Set<string>();
-    spreads.forEach(s => {
-      exSet.add(s.buyExchange);
-      exSet.add(s.sellExchange);
-    });
-    return exSet.size;
-  }, [spreads]);
+  // Computed stats
+  const stats = useMemo(() => computeStats(spreads), [spreads]);
 
   return {
     spreads, loading, error,
     lastUpdated, dataAgeSec, refresh,
     refreshConfig, setAutoRefresh, setRefreshInterval,
-    changedSpreadIds, symbolCount, exchangeCount,
+    changedSpreadIds, stats,
+    soundEnabled, setSoundEnabled,
   };
 }

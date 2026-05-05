@@ -9,6 +9,7 @@ import {
   calculateSpreads,
 } from './exchange-service';
 import { dataCache } from './data-cache';
+import { TickerData } from '@/types';
 
 let collecting = false;
 

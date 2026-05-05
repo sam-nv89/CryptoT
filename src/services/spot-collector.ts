@@ -1,60 +1,80 @@
+/**
+ * Spot Collection Orchestrator
+ *
+ * Runs the full spot data collection cycle:
+ * 1. Fetch currencies/networks (cached for 1 hour)
+ * 2. Fetch spot tickers from all exchanges
+ * 3. Calculate cross-exchange spreads with confidence levels
+ * 4. Store results in data cache
+ */
 import { fetchSpotTickers, fetchSpotCurrencies } from './spot-service';
 import { calculateSpotSpreads } from '@/utils/spot-calculator';
 import { dataCache } from './data-cache';
-import { dataCache as baseDataCache } from './data-cache'; // Just to get discovered symbols from futures if needed
+import type { ExchangeId, NetworkInfo } from '@/types';
 
 let collectingSpot = false;
 
-// Cache currencies for 1 hour, because fetchCurrencies is slow and rarely changes
-let cachedCurrencies: any = null;
+// Currency cache — refreshed every hour since networks rarely change
+let cachedCurrencies: Record<ExchangeId, Record<string, NetworkInfo[]>> | null = null;
 let lastCurrenciesFetch = 0;
+const CURRENCIES_CACHE_TTL = 3600_000; // 1 hour
 
-export async function runSpotCollectionCycle() {
-  if (collectingSpot) return;
+export async function runSpotCollectionCycle(): Promise<{
+  tickerCount: number;
+  spreadCount: number;
+  durationMs: number;
+  exchangesWithNetworks: number;
+}> {
+  if (collectingSpot) {
+    return { tickerCount: 0, spreadCount: 0, durationMs: 0, exchangesWithNetworks: 0 };
+  }
+
   collectingSpot = true;
   const start = Date.now();
 
   try {
-    // 1. Fetch Currencies (Networks) periodically
-    if (!cachedCurrencies || Date.now() - lastCurrenciesFetch > 3600_000) {
-      console.log('[SpotCollector] Fetching networks/currencies...');
-      cachedCurrencies = await fetchSpotCurrencies();
-      lastCurrenciesFetch = Date.now();
-      const exCount = Object.keys(cachedCurrencies).length;
-      console.log(`[SpotCollector] Refreshed networks for ${exCount} exchanges`);
+    // 1. Refresh currencies/networks periodically
+    if (!cachedCurrencies || Date.now() - lastCurrenciesFetch > CURRENCIES_CACHE_TTL) {
+      console.log('[SpotCollector] Refreshing network/currency data...');
+      try {
+        cachedCurrencies = await fetchSpotCurrencies();
+        lastCurrenciesFetch = Date.now();
+      } catch (err) {
+        console.error('[SpotCollector] Currency fetch failed:', (err as Error).message);
+        // Continue with null — calculator will use fallbacks
+      }
     }
 
-    // 2. We need a list of symbols to fetch. We can use discovered symbols from the futures scanner 
-    // or just pass an empty array to use FALLBACK_SYMBOLS inside fetchSpotTickers.
-    const symbolsToFetch = dataCache.hasDiscoveredSymbols() 
-      ? dataCache.getDiscoveredSymbols().map(s => s.split(':')[0])
-      : [];
-    
-    console.log(`[SpotCollector] Symbols to fetch: ${symbolsToFetch.length} (from cache)`);
+    const exchangesWithNetworks = cachedCurrencies ? Object.keys(cachedCurrencies).length : 0;
 
-    // 3. Fetch Spot Tickers
-    console.log(`[SpotCollector] Fetching tickers for ${symbolsToFetch.length || 'all'} symbols...`);
-    const spotTickers = await fetchSpotTickers(symbolsToFetch);
-    console.log(`[SpotCollector] Fetched ${spotTickers.length} spot tickers`);
+    // 2. Fetch all spot tickers in parallel
+    console.log('[SpotCollector] Fetching spot tickers...');
+    const spotTickers = await fetchSpotTickers();
+    console.log(`[SpotCollector] Got ${spotTickers.length} spot tickers`);
 
-    // 4. Calculate Spot Spreads
+    // 3. Calculate spreads with three-tier confidence
     console.log('[SpotCollector] Calculating spreads...');
     const spotSpreads = calculateSpotSpreads(spotTickers, cachedCurrencies);
-    console.log(`[SpotCollector] Calculated ${spotSpreads.length} valid spot spreads`);
+    console.log(`[SpotCollector] Found ${spotSpreads.length} spot spread opportunities`);
 
-    // 5. Update cache
+    // Log confidence breakdown
+    const verified = spotSpreads.filter(s => s.confidence === 'verified').length;
+    const estimated = spotSpreads.filter(s => s.confidence === 'estimated').length;
+    const raw = spotSpreads.filter(s => s.confidence === 'raw').length;
+    console.log(`[SpotCollector] Confidence: ${verified} verified, ${estimated} estimated, ${raw} raw`);
+
+    // 4. Update cache
     dataCache.setSpotSpreads(spotSpreads);
 
     const durationMs = Date.now() - start;
     console.log(
-      `[SpotCollector] Cycle complete: ${spotTickers.length} spot tickers, ${spotSpreads.length} spot spreads — ${durationMs}ms`
+      `[SpotCollector] ✅ Cycle complete: ${spotTickers.length} tickers → ${spotSpreads.length} spreads — ${durationMs}ms`
     );
 
-    return {
-      tickerCount: spotTickers.length,
-      spreadCount: spotSpreads.length,
-      durationMs,
-    };
+    return { tickerCount: spotTickers.length, spreadCount: spotSpreads.length, durationMs, exchangesWithNetworks };
+  } catch (err) {
+    console.error('[SpotCollector] Cycle failed:', err);
+    return { tickerCount: 0, spreadCount: 0, durationMs: Date.now() - start, exchangesWithNetworks: 0 };
   } finally {
     collectingSpot = false;
   }

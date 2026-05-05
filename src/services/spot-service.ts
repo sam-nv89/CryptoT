@@ -1,60 +1,61 @@
+/**
+ * Spot Exchange Service — fetches real-time spot tickers and currency/network data.
+ *
+ * Key differences from futures exchange-service.ts:
+ * - Uses `defaultType: 'spot'` (not 'swap')
+ * - Uses spot-specific CCXT class IDs (not binanceusdm, kucoinfutures)
+ * - Only scans the 9 most reliable exchanges for spot
+ * - Filters to USDT/USDC quote pairs only
+ */
 import ccxt, { type Exchange } from 'ccxt';
-import type { ExchangeId, TickerData, NetworkInfo, SpotSpreadEntry } from '@/types';
-import { CCXT_EXCHANGE_IDS, FALLBACK_SYMBOLS } from '@/config/exchanges';
-import { normalizeSymbol } from '@/utils/crypto';
+import type { ExchangeId, TickerData, NetworkInfo } from '@/types';
+import { SPOT_CCXT_MAP, SPOT_EXCHANGES, MIN_SPOT_VOLUME_USD } from '@/config/spot-config';
 
-// --- Spot-Specific CCXT Class Mapping ---
-// We need the base classes for spot, not the futures-specific ones.
-const SPOT_CCXT_IDS: Record<string, string> = {
-  binance: 'binance',
-  bybit: 'bybit',
-  okx: 'okx',
-  gate: 'gateio',
-  bitget: 'bitget',
-  kucoin: 'kucoin',
-  mexc: 'mexc',
-  htx: 'htx',
-  phemex: 'phemex',
-  bingx: 'bingx',
-  coinex: 'coinex',
-  poloniex: 'poloniex',
-  xt: 'xt',
-  bitmart: 'bitmart',
-  ascendex: 'ascendex',
-};
+// === Exchange Instance Pool for Spot ===
 
-// --- Exchange Instance Pool for Spot ---
 const spotInstances = new Map<string, Exchange>();
 
 function getSpotInstance(exchangeId: string): Exchange {
-  const spotCcxtId = SPOT_CCXT_IDS[exchangeId] || exchangeId;
+  const spotCcxtId = SPOT_CCXT_MAP[exchangeId] || exchangeId;
   let instance = spotInstances.get(spotCcxtId);
+
   if (!instance) {
     const ExchangeClass = (ccxt as unknown as Record<string, new (opts?: object) => Exchange>)[spotCcxtId];
     if (!ExchangeClass) throw new Error(`Exchange "${spotCcxtId}" not found in CCXT`);
-    
-    const options: any = {
+
+    const options: Record<string, unknown> = {
       enableRateLimit: true,
-      timeout: 30_000,
-      options: { defaultType: 'spot' },
+      timeout: 25_000,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      options: {
+        defaultType: 'spot',
+        fetchCurrencies: !['gate', 'bitmart', 'ascendex', 'mexc'].includes(exchangeId),
+      },
     };
 
-    if (spotCcxtId === 'okx') {
-      options.options['fetchCurrencies'] = true;
+    // Exchange-specific tweaks
+    if (spotCcxtId === 'gateio') {
+      (options.options as Record<string, unknown>)['fetchCurrencies'] = false;
     }
 
     instance = new ExchangeClass(options);
+
+    // Hard-disable problematic features
+    if (['gateio', 'mexc'].includes(spotCcxtId)) {
+      instance.has['fetchCurrencies'] = false;
+    }
+
     spotInstances.set(spotCcxtId, instance);
   }
   return instance;
 }
 
-// --- Fetch Currencies (Networks) ---
+// === Fetch Currencies (Networks) ===
+
 export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<string, NetworkInfo[]>>> {
   const results: Record<string, Record<string, NetworkInfo[]>> = {};
 
-  const tasks = Object.entries(CCXT_EXCHANGE_IDS).map(async ([exchangeId, ccxtId]) => {
-    if (!ccxtId || exchangeId === 'hyperliquid') return;
+  const tasks = SPOT_EXCHANGES.map(async (exchangeId) => {
     try {
       const exchange = getSpotInstance(exchangeId);
       if (!exchange.has['fetchCurrencies']) return;
@@ -81,52 +82,65 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
         }
       }
       results[exchangeId] = exNetworks;
+      console.log(`[SpotService] ${exchangeId}: fetched ${Object.keys(exNetworks).length} currencies`);
     } catch (err) {
-      console.warn(`[SpotService] fetchCurrencies failed for ${exchangeId}:`, (err as Error).message);
+      console.warn(`[SpotService] fetchCurrencies skipped for ${exchangeId}:`, (err as Error).message?.slice(0, 80));
     }
   });
 
   await Promise.allSettled(tasks);
+  const successCount = Object.keys(results).length;
+  console.log(`[SpotService] Currencies available from ${successCount}/${SPOT_EXCHANGES.length} exchanges`);
   return results as Record<ExchangeId, Record<string, NetworkInfo[]>>;
 }
 
-// --- Fetch Spot Tickers ---
-export async function fetchSpotTickers(symbols: string[]): Promise<TickerData[]> {
+// === Fetch Spot Tickers ===
+
+export async function fetchSpotTickers(): Promise<TickerData[]> {
   const results: TickerData[] = [];
-  const symbolSet = new Set(symbols.length > 0 ? symbols : FALLBACK_SYMBOLS.map(s => s.replace(':USDT', '')));
+  const start = Date.now();
 
-  const tasks = Object.entries(CCXT_EXCHANGE_IDS).map(async ([exchangeId, ccxtId]) => {
-    if (!ccxtId || exchangeId === 'hyperliquid') return; // HL is DEX perp mostly, though has spot, skipping for simplicity
-
+  const tasks = SPOT_EXCHANGES.map(async (exchangeId) => {
     try {
       const exchange = getSpotInstance(exchangeId);
-      let tickers: Record<string, any> = {};
-      let bidsAsks: Record<string, any> = {};
+      let tickers: Record<string, unknown> = {};
+      let bidsAsks: Record<string, unknown> = {};
 
       try {
         const [t, b] = await Promise.all([
           exchange.fetchTickers(),
-          exchange.has['fetchBidsAsks'] ? exchange.fetchBidsAsks().catch(() => ({})) : Promise.resolve({})
+          exchange.has['fetchBidsAsks']
+            ? exchange.fetchBidsAsks().catch(() => ({}))
+            : Promise.resolve({}),
         ]);
         tickers = t;
-        bidsAsks = b as Record<string, any>;
-
+        bidsAsks = b as Record<string, unknown>;
       } catch {
-        return; // Fallback skipped for brevity in spot
+        console.warn(`[SpotService] ${exchangeId}: fetchTickers failed, skipping`);
+        return;
       }
 
+      let addedCount = 0;
       for (const [symbol, ticker] of Object.entries(tickers)) {
-        // Unified symbols in CCXT for spot are usually BASE/QUOTE
+        // Only USDT and USDC spot pairs
         if (!symbol.includes('/USDT') && !symbol.includes('/USDC')) continue;
-        
-        const book = bidsAsks[symbol] || {};
-        const bid = book.bid ?? ticker.bid;
-        const ask = book.ask ?? ticker.ask;
-        const last = ticker.last ?? book.last;
-        const bidVolume = book.bidVolume ?? ticker.bidVolume ?? 0;
-        const askVolume = book.askVolume ?? ticker.askVolume ?? 0;
-        
+        // Skip futures/swap symbols that might leak through
+        if (symbol.includes(':')) continue;
+
+        const t = ticker as Record<string, number | undefined>;
+        const book = (bidsAsks[symbol] || {}) as Record<string, number | undefined>;
+        const bid = book.bid ?? t.bid;
+        const ask = book.ask ?? t.ask;
+        const last = t.last ?? book.last;
+        const bidVolume = book.bidVolume ?? t.bidVolume ?? 0;
+        const askVolume = book.askVolume ?? t.askVolume ?? 0;
+        const quoteVolume = t.quoteVolume ?? t.baseVolume ?? 0;
+
         if (!bid || !ask || !last) continue;
+        if (bid <= 0 || ask <= 0 || last <= 0) continue;
+
+        // Filter out ultra-low volume pairs (noise)
+        if (quoteVolume < MIN_SPOT_VOLUME_USD) continue;
 
         results.push({
           exchange: exchangeId as ExchangeId,
@@ -134,17 +148,21 @@ export async function fetchSpotTickers(symbols: string[]): Promise<TickerData[]>
           bid,
           ask,
           last,
-          volume24h: ticker.quoteVolume ?? ticker.baseVolume ?? 0,
+          volume24h: quoteVolume,
           bidVolume,
           askVolume,
-          timestamp: ticker.timestamp ?? book.timestamp ?? Date.now(),
+          timestamp: (t.timestamp as number) ?? (book.timestamp as number) ?? Date.now(),
         });
+        addedCount++;
       }
+
+      console.log(`[SpotService] ${exchangeId}: ${addedCount} spot tickers (${Object.keys(tickers).length} total)`);
     } catch (err) {
-      console.error(`[SpotService] Ticker fetch failed for ${exchangeId}:`, (err as Error).message);
+      console.error(`[SpotService] ${exchangeId} failed:`, (err as Error).message?.slice(0, 100));
     }
   });
 
   await Promise.allSettled(tasks);
+  console.log(`[SpotService] Total: ${results.length} spot tickers in ${Date.now() - start}ms`);
   return results;
 }

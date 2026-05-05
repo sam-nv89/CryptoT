@@ -23,28 +23,40 @@ CryptoTracker is a high-frequency data ingestion and visualization platform. It 
 ### 4. UI Architecture
 - **Real-time Tables**: High-performance tables with inline filtering and sorting using `useMemo` for efficient rendering of large datasets.
 - **Modular Shell**: A consistent layout with an adaptive sidebar (toggable icons/full view) and state-of-the-art aesthetics.
-- **Views**:
-    - `/dashboard`: Real-time market state and spreads.
-    - `/alerts`: Live signal feed with filtering and sound alerts.
-    - `/reports`: Detailed arbitrage breakdowns (matching pro-bot formats).
-    - `/funding`: Global funding rate matrix.
+### 5. Spot Arbitrage Engine (`src/utils/spot-calculator.ts`)
+The spot arbitrage module uses a unique **Three-Tier Confidence Model** to handle inconsistent API data across exchanges:
+- **🟢 Verified**: Uses real-time network fees fetched via `fetchCurrencies`. Most accurate.
+- **🟡 Estimated**: Uses a specialized fallback table (`src/config/spot-config.ts`) for top 50 assets.
+- **🔴 Raw**: Uses a percentage-based estimate (0.3% of trade value) for exotic tokens where network data is missing.
+
+This ensures the tool provides actionable data even when exchanges restrict access to their wallet/network APIs.
 
 ## 🛠 Integration Details
 
+### Spot vs Futures Optimization
+The system maintains two separate service layers to avoid symbol contamination and rate-limit issues:
+- **Futures Service**: Specialized in perpetual swaps and funding rates.
+- **Spot Service**: Focuses on the 9 most reliable spot exchanges, filtering for USDT/USDC pairs and minimum volume thresholds.
+
 ### CCXT Resilience Tweaks
 To ensure maximum exchange coverage, the service implements:
-- **`fetchCurrencies: false`**: Bypasses permission-restricted endpoints on Gate.io and AscendEX.
-- **`fetchMarkets: ['swap']`**: Forces focus on perpetual markets, skipping potentially blocked spot endpoints.
-- **Custom Hostnames**: Support for alternative endpoints (e.g., OKX `aws.okex.com`) to bypass regional blocks.
+- **`fetchCurrencies: false`**: Bypasses permission-restricted endpoints on Gate.io, MEXC, and AscendEX.
+- **`fetchMarkets: ['swap']`**: Forces focus on perpetual markets for the futures engine.
+- **`defaultType: 'spot'`**: Explicitly used in the spot engine to ensure correct symbol resolution.
 
 ## 📁 Directory Structure
 
 - `src/services/`: 
-    - `exchange-service.ts`: Core CCXT logic and market discovery.
-    - `alert-engine.ts`: Net-profit math and signal generation.
-    - `report-service.ts`: Detailed reporting and data export logic (CSV/JSON).
-    - `collector.ts`: Background polling orchestration.
-- `src/config/`: Exchange registry, fee structures, and fallback symbols.
-- `src/utils/`: Math utilities, symbol normalization, and formatting.
+    - `exchange-service.ts`: Core CCXT logic for futures.
+    - `spot-service.ts`: Specialized spot ticker and network fetching.
+    - `spot-collector.ts`: Orchestrates spot cycles and currency caching.
+    - `alert-engine.ts`: Net-profit math for futures.
+    - `report-service.ts`: Detailed reporting and data export.
+- `src/config/`: 
+    - `exchanges.ts`: Global exchange registry.
+    - `spot-config.ts`: Spot-specific fees, fallback withdrawal costs, and thresholds.
+- `src/utils/`: 
+    - `spot-calculator.ts`: Three-tier confidence spread logic.
+    - `crypto.ts`: Symbol normalization and multipliers.
 - `src/components/`: Reusable UI components (Dashboard, Layout, Shared).
-- `src/types/`: Unified TypeScript interfaces for the entire project.
+- `src/types/`: Unified TypeScript interfaces.

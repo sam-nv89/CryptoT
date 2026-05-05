@@ -4,12 +4,11 @@ A premium cryptocurrency monitoring dashboard designed for real-time tracking of
 
 ## 🚀 Key Features
 
-- **Cross-Exchange Spreads**: Real-time identification of price discrepancies between platforms.
-- **Funding Rate Monitor**: Comparison of funding rates for perpetual futures.
-- **Dynamic Market Discovery**: Automatic scanning and matching of thousands of trading pairs.
-- **Multi-Chain Support**: Integrated with native DEX protocols (Hyperliquid, dYdX, ApeX).
-- **Advanced Filtering**: Granular control over volume, spread percentage, and specific exchanges.
-- **Premium UI**: Modern, high-performance interface with glassmorphism and real-time updates.
+- **Spot Arbitrage Engine**: High-fidelity tracking of spot price discrepancies with a three-tier confidence model (Verified, Estimated, Raw) for withdrawal fees.
+- **Futures Arbitrage & Funding**: Real-time comparison of funding rates and perpetual futures spreads.
+- **Dynamic Market Discovery**: Automatic scanning and mapping of 700+ assets across 18+ exchanges.
+- **Smart Fee Calculation**: Intelligent net-profit estimation factoring in trading fees and network withdrawal costs.
+- **Premium UX**: Professional-grade dashboard with glassmorphism, real-time "flash" updates, and sound alerts for high-yield signals.
 
 ## 🏛 Supported Exchanges
 

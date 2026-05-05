@@ -126,11 +126,12 @@ const MOCK_EXAMPLE: FuturesArbitrageReport = {
     fundingRate: -0.5025,
     fundingForecast: undefined,
 
-    nextFundingTime: '01:54:12',
+    nextFundingTime: Date.now() + 3600000,
     ask: 0.01524,
     bid: 0.01523,
     takerFee: 0.1,
     volume24h: 1245000,
+    timeframe: '8h',
     url: 'https://www.mexc.com/futures/POKT_USDT'
   },
   longPosition: {
@@ -138,11 +139,12 @@ const MOCK_EXAMPLE: FuturesArbitrageReport = {
     fundingRate: -0.3424,
     fundingForecast: undefined,
 
-    nextFundingTime: '03:12:05',
+    nextFundingTime: Date.now() + 7200000,
     ask: 0.01476,
     bid: 0.01475,
     takerFee: 0.065,
     volume24h: 854000,
+    timeframe: '8h',
     url: 'https://www.gate.io/futures/usdt/POKT_USDT'
   }
 };

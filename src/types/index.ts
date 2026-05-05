@@ -53,11 +53,18 @@ export interface NetworkInfo {
   withdrawFee: number;
 }
 
+export type SpotConfidence = 'verified' | 'estimated' | 'raw';
+
 export interface SpotSpreadEntry extends SpreadEntry {
   withdrawNetwork?: string;
   depositNetwork?: string;
   withdrawFeeUsd: number;
+  estimatedWithdrawFee?: number; // Fallback estimate when real fee unknown
   netProfit: number; // estimatedProfit - withdrawFeeUsd - tradingFees
+  confidence: SpotConfidence;
+  tradingFeesUsd: number;
+  netSpreadPercent: number; // Spread after all fees
+  profitPer1000: number; // Net $ profit per $1000 capital deployed
 }
 
 export interface SpreadPair {

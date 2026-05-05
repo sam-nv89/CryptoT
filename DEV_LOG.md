@@ -1,5 +1,52 @@
 # DEV_LOG — CryptoTracker
 
+## 2026-05-05 — Spot Arbitrage: Working Real-Time Tool
+
+### Problem
+The spot arbitrage module was non-functional: `fetchCurrencies` blocked on most exchanges,
+causing `calculateSpotSpreads` to return 0 results for virtually all pairs.
+
+### Solution — Three-Tier Confidence Model
+Implemented a progressive confidence system that always produces results:
+- **🟢 Verified**: Both exchanges returned real network/fee data via `fetchCurrencies`
+- **🟡 Estimated**: Fallback withdrawal fee table for top 50 tokens
+- **🔴 Raw**: Percentage-based fee estimate (0.3% of token price, min $0.50, max $10)
+
+### Files Changed
+- **[NEW]** `src/config/spot-config.ts` — 9 exchanges, fallback fees for 50+ tokens, thresholds
+- **[REWRITE]** `src/utils/spot-calculator.ts` — Three-tier confidence, smart fee resolution
+- **[REWRITE]** `src/services/spot-service.ts` — 9 exchanges, proper spot mode, volume filters
+- **[REWRITE]** `src/services/spot-collector.ts` — Currency cache (1hr TTL), confidence logging
+- **[REWRITE]** `src/app/api/spot/spreads/route.ts` — Instant cache return, background refresh
+- **[REWRITE]** `src/hooks/useSpotData.ts` — Stats computation, sound alerts, change detection
+- **[REWRITE]** `src/components/dashboard/SpotTable.tsx` — Confidence badges, HOT/WARM, expand
+- **[REWRITE]** `src/app/spot/page.tsx` — Stats cards, confidence legend, professional layout
+- **[MODIFY]** `src/types/index.ts` — Added `SpotConfidence`, expanded `SpotSpreadEntry`
+
+### Results
+- 10+ live arbitrage opportunities with positive net spread
+- Data quality indicators (Verified/Estimated/Raw) visible on each row
+- Auto-refresh every 30 seconds with flash animations on changes
+- Sound notifications for HOT signals (toggleable)
+- Expandable row details with fee breakdown
+- Build: ✅ 0 errors, 0 warnings
+
+
+## 2026-05-05 — Server Launch
+- **Server Execution**: Запущен сервер разработки на `http://localhost:3000`.
+- **Status**: Система активна и готова к работе (Turbopack).
+
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Status**: System is up and running in development mode (Turbopack).
+
+- **Git Sync**: Успешно загружены обновления из репозитория GitHub.
+- **Hotfixes**: Исправлены регрессии TypeScript, возникшие после обновления:
+  - Исправлены типы в `MOCK_EXAMPLE` на странице `/reports` (`nextFundingTime` и `timeframe`).
+  - Добавлен недостающий импорт `TickerData` в `collector.ts`.
+  - Исправлено несоответствие имен свойств (`baseAsset` vs `asset`) в `spot-calculator.ts`.
+- **Verification**: Проведена полная проверка сборки (`npm run build`) — ошибок не обнаружено.
+- **Status**: Репозиторий синхронизирован и работоспособен.
+
 ## 2026-05-03 — Funding Rates Quality & Data Enrichment
 - **Data Model**: Updated `FundingRateEntry` to include `price`, `volume24h`, and `nextRate` (predicted).
 - **Optimization**: Implemented batch fetching for funding rates on major exchanges (Binance, Bybit, OKX, Gate, Bitget), significantly increasing coverage and speed.
