@@ -7,10 +7,11 @@
 - [x] Automated symbol normalization logic
 
 ## Phase 2: Spot Arbitrage Perfecting ✅
-- [x] Dedicated Spot Service & Collector
+- [x] Dedicated Spot Service & Collector (14 exchanges)
 - [x] **Three-Tier Confidence Model** (Verified/Estimated/Raw)
-- [x] Fallback withdrawal fee configuration for top 50 assets
-- [x] Professional UI with stats cards and sound alerts
+- [x] Fallback withdrawal fee configuration for 90+ assets
+- [x] **Smart Depth Estimation** logic (volume-based liquidity proxy)
+- [x] Professional UI with stats cards, confidence filters, and sound alerts
 - [x] Net-profit calculation with trading and network fees
 
 ## Phase 3: Futures & Funding Rates 🔄

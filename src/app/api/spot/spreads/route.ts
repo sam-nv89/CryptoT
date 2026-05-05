@@ -2,14 +2,24 @@ import { NextResponse } from 'next/server';
 import { runSpotCollectionCycle } from '@/services/spot-collector';
 import { dataCache } from '@/services/data-cache';
 import { SPOT_CACHE_MAX_AGE_MS, SPOT_CACHE_BG_REFRESH_MS } from '@/config/spot-config';
+import type { SpotSpreadEntry, SpotConfidence } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
+    const url = new URL(req.url);
+
+    // Optional server-side filters (reduce payload size)
+    const minSpread  = parseFloat(url.searchParams.get('min_spread')  ?? '0') || 0;
+    const confParam  = url.searchParams.get('confidence');
+    const allowedConf: Set<SpotConfidence> | null = confParam
+      ? new Set(confParam.split(',') as SpotConfidence[])
+      : null;
+
     const cached = dataCache.getSpotSpreads();
-    const now = Date.now();
-    const age = now - cached.updatedAt;
+    const now    = Date.now();
+    const age    = now - cached.updatedAt;
 
     // If cache is empty or extremely stale, block and await collection
     if (cached.data.length === 0 || age > SPOT_CACHE_MAX_AGE_MS) {
@@ -20,32 +30,40 @@ export async function GET() {
       });
 
       const freshCache = dataCache.getSpotSpreads();
+      const data = applyFilters(freshCache.data, minSpread, allowedConf);
+
       return NextResponse.json({
-        data: freshCache.data,
-        timestamp: freshCache.updatedAt,
-        cached: false,
+        data,
+        timestamp:  freshCache.updatedAt,
+        cached:     false,
         meta: result ? {
-          tickerCount: result.tickerCount,
-          spreadCount: result.spreadCount,
-          durationMs: result.durationMs,
+          tickerCount:          result.tickerCount,
+          spreadCount:          result.spreadCount,
+          filteredCount:        data.length,
+          durationMs:           result.durationMs,
           exchangesWithNetworks: result.exchangesWithNetworks,
+          exchangesCovered:     result.exchangesCovered,
+          totalExchanges:       result.totalExchanges,
+          confidenceBreakdown:  result.confidenceBreakdown,
         } : null,
       });
     }
 
-    // If cache is slightly stale, return it immediately and trigger background refresh
+    // If cache is slightly stale, return immediately and trigger background refresh
     if (age > SPOT_CACHE_BG_REFRESH_MS) {
       runSpotCollectionCycle().catch(console.error);
     }
 
-    // Return cached data instantly
+    const data = applyFilters(cached.data, minSpread, allowedConf);
+
     return NextResponse.json({
-      data: cached.data,
+      data,
       timestamp: cached.updatedAt,
-      cached: true,
+      cached:    true,
       meta: {
-        spreadCount: cached.data.length,
-        ageMs: age,
+        spreadCount:   cached.data.length,
+        filteredCount: data.length,
+        ageMs:         age,
       },
     });
   } catch (error) {
@@ -55,4 +73,16 @@ export async function GET() {
       { status: 500 }
     );
   }
+}
+
+/** Apply optional server-side filters to reduce response payload */
+function applyFilters(
+  data: SpotSpreadEntry[],
+  minSpread: number,
+  allowedConf: Set<SpotConfidence> | null
+): SpotSpreadEntry[] {
+  let result = data;
+  if (minSpread > 0)    result = result.filter(s => s.spreadPercent >= minSpread);
+  if (allowedConf)      result = result.filter(s => allowedConf.has(s.confidence));
+  return result;
 }

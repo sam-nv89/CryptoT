@@ -4,12 +4,19 @@
  * Key differences from futures exchange-service.ts:
  * - Uses `defaultType: 'spot'` (not 'swap')
  * - Uses spot-specific CCXT class IDs (not binanceusdm, kucoinfutures)
- * - Only scans the 9 most reliable exchanges for spot
- * - Filters to USDT/USDC quote pairs only
+ * - Scans 14 exchanges for maximum spread coverage
+ * - Filters to USDT and USDC spot pairs
+ * - Smart depth data: merges fetchTickers() + fetchBidsAsks() where available
  */
 import ccxt, { type Exchange } from 'ccxt';
 import type { ExchangeId, TickerData, NetworkInfo } from '@/types';
-import { SPOT_CCXT_MAP, SPOT_EXCHANGES, MIN_SPOT_VOLUME_USD } from '@/config/spot-config';
+import {
+  SPOT_CCXT_MAP,
+  SPOT_EXCHANGES,
+  SPOT_NO_CURRENCIES,
+  SPOT_NO_BIDS_ASKS,
+  MIN_SPOT_VOLUME_USD,
+} from '@/config/spot-config';
 
 // === Exchange Instance Pool for Spot ===
 
@@ -25,23 +32,29 @@ function getSpotInstance(exchangeId: string): Exchange {
 
     const options: Record<string, unknown> = {
       enableRateLimit: true,
-      timeout: 25_000,
+      timeout: 30_000,
       userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
       options: {
         defaultType: 'spot',
-        fetchCurrencies: !['gate', 'bitmart', 'ascendex', 'mexc'].includes(exchangeId),
       },
     };
 
-    // Exchange-specific tweaks
-    if (spotCcxtId === 'gateio') {
-      (options.options as Record<string, unknown>)['fetchCurrencies'] = false;
+    // Exchange-specific overrides
+    switch (spotCcxtId) {
+      case 'bitmart':
+        // BitMart requires access_token for some endpoints — use public only
+        (options.options as Record<string, unknown>)['fetchCurrencies'] = false;
+        break;
+      case 'phemex':
+        // Phemex spot market uses non-standard API path
+        (options.options as Record<string, unknown>)['defaultType'] = 'spot';
+        break;
     }
 
     instance = new ExchangeClass(options);
 
-    // Hard-disable problematic features
-    if (['gateio', 'mexc'].includes(spotCcxtId)) {
+    // Hard-disable fetchCurrencies for known-problematic exchanges
+    if (SPOT_NO_CURRENCIES.includes(spotCcxtId) || SPOT_NO_CURRENCIES.includes(exchangeId)) {
       instance.has['fetchCurrencies'] = false;
     }
 
@@ -56,6 +69,9 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
   const results: Record<string, Record<string, NetworkInfo[]>> = {};
 
   const tasks = SPOT_EXCHANGES.map(async (exchangeId) => {
+    // Skip exchanges known to not support fetchCurrencies
+    if (SPOT_NO_CURRENCIES.includes(exchangeId)) return;
+
     try {
       const exchange = getSpotInstance(exchangeId);
       if (!exchange.has['fetchCurrencies']) return;
@@ -67,13 +83,17 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
         if (!currency || !currency.networks) continue;
         const networks: NetworkInfo[] = [];
 
-        for (const [netCode, netData] of Object.entries(currency.networks)) {
+        for (const [, netData] of Object.entries(currency.networks)) {
           if (!netData) continue;
+          const net = netData as Record<string, unknown>;
+          const netId = (net.id as string) || (net.network as string) || '';
+          if (!netId) continue;
+
           networks.push({
-            network: netCode,
-            depositEnable: netData.deposit ?? currency.deposit ?? false,
-            withdrawEnable: netData.withdraw ?? currency.withdraw ?? false,
-            withdrawFee: netData.fee ?? currency.fee ?? 0,
+            network:        netId,
+            depositEnable:  (net.deposit as boolean) ?? (currency.deposit as boolean) ?? false,
+            withdrawEnable: (net.withdraw as boolean) ?? (currency.withdraw as boolean) ?? false,
+            withdrawFee:    (net.fee as number) ?? (currency.fee as number) ?? 0,
           });
         }
 
@@ -81,10 +101,14 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
           exNetworks[code] = networks;
         }
       }
+
       results[exchangeId] = exNetworks;
       console.log(`[SpotService] ${exchangeId}: fetched ${Object.keys(exNetworks).length} currencies`);
     } catch (err) {
-      console.warn(`[SpotService] fetchCurrencies skipped for ${exchangeId}:`, (err as Error).message?.slice(0, 80));
+      console.warn(
+        `[SpotService] fetchCurrencies skipped for ${exchangeId}:`,
+        (err as Error).message?.slice(0, 80)
+      );
     }
   });
 
@@ -99,6 +123,7 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
 export async function fetchSpotTickers(): Promise<TickerData[]> {
   const results: TickerData[] = [];
   const start = Date.now();
+  const exchangeStats: Record<string, number> = {};
 
   const tasks = SPOT_EXCHANGES.map(async (exchangeId) => {
     try {
@@ -106,49 +131,60 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
       let tickers: Record<string, unknown> = {};
       let bidsAsks: Record<string, unknown> = {};
 
+      // Fetch all tickers (always)
       try {
-        const [t, b] = await Promise.all([
-          exchange.fetchTickers(),
-          exchange.has['fetchBidsAsks']
-            ? exchange.fetchBidsAsks().catch(() => ({}))
-            : Promise.resolve({}),
-        ]);
-        tickers = t;
-        bidsAsks = b as Record<string, unknown>;
-      } catch {
-        console.warn(`[SpotService] ${exchangeId}: fetchTickers failed, skipping`);
+        tickers = await exchange.fetchTickers();
+      } catch (err) {
+        console.warn(`[SpotService] ${exchangeId}: fetchTickers failed — ${(err as Error).message?.slice(0, 60)}`);
         return;
       }
 
+      // Merge bid/ask data where supported (improves depth accuracy)
+      const noBidsAsks = SPOT_NO_BIDS_ASKS.includes(exchangeId);
+      if (!noBidsAsks && exchange.has['fetchBidsAsks']) {
+        try {
+          bidsAsks = await exchange.fetchBidsAsks() as Record<string, unknown>;
+        } catch {
+          // Non-critical — ticker bid/ask will be used as fallback
+        }
+      }
+
       let addedCount = 0;
+
       for (const [symbol, ticker] of Object.entries(tickers)) {
         // Only USDT and USDC spot pairs
         if (!symbol.includes('/USDT') && !symbol.includes('/USDC')) continue;
-        // Skip futures/swap symbols that might leak through
+        // Skip futures/swap symbols (they contain ':')
         if (symbol.includes(':')) continue;
 
-        const t = ticker as Record<string, number | undefined>;
+        const t = ticker as Record<string, number | string | undefined>;
         const book = (bidsAsks[symbol] || {}) as Record<string, number | undefined>;
-        const bid = book.bid ?? t.bid;
-        const ask = book.ask ?? t.ask;
-        const last = t.last ?? book.last;
-        const bidVolume = book.bidVolume ?? t.bidVolume ?? 0;
-        const askVolume = book.askVolume ?? t.askVolume ?? 0;
-        const quoteVolume = t.quoteVolume ?? t.baseVolume ?? 0;
 
+        // Prefer order book data for bid/ask, fall back to ticker
+        const bid  = (book.bid  as number | undefined) ?? (t.bid  as number | undefined);
+        const ask  = (book.ask  as number | undefined) ?? (t.ask  as number | undefined);
+        const last = (t.last   as number | undefined)  ?? (book.last as number | undefined);
+
+        // Must have price data
         if (!bid || !ask || !last) continue;
         if (bid <= 0 || ask <= 0 || last <= 0) continue;
+        // Skip invalid spreads (crossed book is exchange data error)
+        if (bid > ask * 1.01) continue;
 
-        // Filter out ultra-low volume pairs (noise)
+        const bidVolume  = (book.bidVolume  as number | undefined) ?? (t.bidVolume  as number | undefined) ?? 0;
+        const askVolume  = (book.askVolume  as number | undefined) ?? (t.askVolume  as number | undefined) ?? 0;
+        const quoteVolume = (t.quoteVolume as number | undefined) ?? (t.baseVolume as number | undefined) ?? 0;
+
+        // Filter out ultra-low volume pairs (genuine noise)
         if (quoteVolume < MIN_SPOT_VOLUME_USD) continue;
 
         results.push({
-          exchange: exchangeId as ExchangeId,
+          exchange:  exchangeId as ExchangeId,
           symbol,
           bid,
           ask,
           last,
-          volume24h: quoteVolume,
+          volume24h:  quoteVolume,
           bidVolume,
           askVolume,
           timestamp: (t.timestamp as number) ?? (book.timestamp as number) ?? Date.now(),
@@ -156,13 +192,23 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
         addedCount++;
       }
 
-      console.log(`[SpotService] ${exchangeId}: ${addedCount} spot tickers (${Object.keys(tickers).length} total)`);
+      exchangeStats[exchangeId] = addedCount;
+      console.log(
+        `[SpotService] ${exchangeId}: ${addedCount} spot tickers (${Object.keys(tickers).length} raw, bidsAsks=${!noBidsAsks})`
+      );
     } catch (err) {
       console.error(`[SpotService] ${exchangeId} failed:`, (err as Error).message?.slice(0, 100));
+      exchangeStats[exchangeId] = 0;
     }
   });
 
   await Promise.allSettled(tasks);
-  console.log(`[SpotService] Total: ${results.length} spot tickers in ${Date.now() - start}ms`);
+
+  const totalExchanges = Object.keys(exchangeStats).length;
+  const activeExchanges = Object.values(exchangeStats).filter(n => n > 0).length;
+  console.log(
+    `[SpotService] Total: ${results.length} spot tickers from ${activeExchanges}/${totalExchanges} exchanges — ${Date.now() - start}ms`
+  );
+
   return results;
 }

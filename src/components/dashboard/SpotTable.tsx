@@ -106,21 +106,23 @@ function SortableHeader({ label, sortKey, currentSort, onSort, align = 'left' }:
 }
 
 // === Filter Bar ===
-function FilterBar({ filters, onChange, availableExchanges, totalCount, filteredCount }: {
+function FilterBar({ filters, onChange, availableExchanges, totalCount, filteredCount, confidenceFilter, onConfidenceChange }: {
   filters: SpreadFilterConfig;
   onChange: (f: Partial<SpreadFilterConfig>) => void;
   availableExchanges: ExchangeId[];
   totalCount: number;
   filteredCount: number;
+  confidenceFilter: SpotConfidence | 'all';
+  onConfidenceChange: (c: SpotConfidence | 'all') => void;
 }) {
   const [showExchanges, setShowExchanges] = useState(false);
   const hasFilters = filters.search || filters.exchanges.length > 0
-    || filters.minSpreadPercent > 0 || filters.minVolume > 0;
+    || filters.minSpreadPercent > 0 || filters.minVolume > 0 || confidenceFilter !== 'all';
 
   return (
     <div className="px-4 py-3 border-b border-border/50 space-y-2">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[120px] max-w-[240px]">
+        <div className="relative flex-1 min-w-[120px] max-w-[200px]">
           <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted" />
           <input
             id="spot-search"
@@ -136,6 +138,27 @@ function FilterBar({ filters, onChange, availableExchanges, totalCount, filtered
               <X size={12} />
             </button>
           )}
+        </div>
+
+        {/* Confidence filter buttons */}
+        <div className="flex items-center gap-1">
+          {(['all', 'verified', 'estimated', 'raw'] as const).map((c) => (
+            <button
+              key={c}
+              onClick={() => onConfidenceChange(c)}
+              className={clsx(
+                'px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider border transition-all',
+                confidenceFilter === c
+                  ? c === 'verified'  ? 'bg-accent-green/15 text-accent-green border-accent-green/30'
+                  : c === 'estimated' ? 'bg-accent-amber/15 text-accent-amber border-accent-amber/30'
+                  : c === 'raw'       ? 'bg-text-muted/20 text-text-secondary border-border'
+                  : 'bg-primary-500/15 text-primary-400 border-primary-500/30'
+                  : 'bg-bg-elevated text-text-muted border-border hover:text-text-secondary',
+              )}
+            >
+              {c === 'all' ? 'All' : c === 'verified' ? '🟢' : c === 'estimated' ? '🟡' : '🔴'}
+            </button>
+          ))}
         </div>
 
         <div className="relative">
@@ -189,15 +212,8 @@ function FilterBar({ filters, onChange, availableExchanges, totalCount, filtered
             className="w-16 px-2 py-1.5 rounded-lg text-xs mono-number bg-bg-elevated border border-border text-text-primary focus:outline-none focus:border-primary-500/40 transition-colors" />
         </div>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-[10px] text-text-muted">Min Vol:</span>
-          <input id="spot-min-volume" type="number" min="0" step="1000" value={filters.minVolume || ''}
-            placeholder="0" onChange={(e) => onChange({ minVolume: parseFloat(e.target.value) || 0 })}
-            className="w-20 px-2 py-1.5 rounded-lg text-xs mono-number bg-bg-elevated border border-border text-text-primary focus:outline-none focus:border-primary-500/40 transition-colors" />
-        </div>
-
         {hasFilters && (
-          <button onClick={() => onChange({ ...DEFAULT_SPREAD_FILTERS })} className="text-[10px] text-accent-red hover:text-accent-red/80 px-1">
+          <button onClick={() => { onChange({ ...DEFAULT_SPREAD_FILTERS }); onConfidenceChange('all'); }} className="text-[10px] text-accent-red hover:text-accent-red/80 px-1">
             Reset
           </button>
         )}
@@ -214,7 +230,7 @@ function FilterBar({ filters, onChange, availableExchanges, totalCount, filtered
 function SkeletonRow() {
   return (
     <tr className="border-b border-border/50">
-      {Array.from({ length: 8 }).map((_, i) => (
+      {Array.from({ length: 9 }).map((_, i) => (
         <td key={i} className="px-3 py-3"><div className="skeleton h-4 w-16 rounded" /></td>
       ))}
     </tr>
@@ -226,7 +242,7 @@ function ExpandedDetails({ spread }: { spread: SpotSpreadEntry }) {
   const fmtUsd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
   return (
     <tr className="bg-bg-elevated/30">
-      <td colSpan={8} className="px-6 py-4">
+      <td colSpan={9} className="px-6 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <span className="text-text-muted block mb-1">Gross Spread</span>
@@ -276,6 +292,7 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
   const [filters, setFilters] = useState<SpreadFilterConfig>({ ...DEFAULT_SPREAD_FILTERS });
   const [page, setPage] = useState(0);
   const [expandedUid, setExpandedUid] = useState<string | null>(null);
+  const [confidenceFilter, setConfidenceFilter] = useState<SpotConfidence | 'all'>('all');
 
   const handleSort = useCallback((key: SpreadSortKey) => {
     setSort(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
@@ -283,6 +300,11 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
 
   const handleFilterChange = useCallback((partial: Partial<SpreadFilterConfig>) => {
     setFilters(prev => ({ ...prev, ...partial }));
+    setPage(0);
+  }, []);
+
+  const handleConfidenceChange = useCallback((c: SpotConfidence | 'all') => {
+    setConfidenceFilter(c);
     setPage(0);
   }, []);
 
@@ -302,12 +324,13 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
       const exSet = new Set(filters.exchanges);
       filtered = filtered.filter(s => exSet.has(s.buyExchange) || exSet.has(s.sellExchange));
     }
+    if (confidenceFilter !== 'all') filtered = filtered.filter(s => s.confidence === confidenceFilter);
     if (filters.minSpreadPercent > 0) filtered = filtered.filter(s => s.spreadPercent >= filters.minSpreadPercent);
     if (filters.minVolume > 0) filtered = filtered.filter(s => s.volume24h >= filters.minVolume);
     const sorted = [...filtered].sort((a, b) => compareSpreads(a, b, sort.key, sort.direction));
     const start = page * filters.pageSize;
     return { displayed: sorted.slice(start, start + filters.pageSize), totalFiltered: filtered.length };
-  }, [spreads, filters, sort, page]);
+  }, [spreads, filters, confidenceFilter, sort, page]);
 
   const totalPages = Math.ceil(totalFiltered / filters.pageSize);
 
@@ -343,7 +366,8 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
       </div>
 
       <FilterBar filters={filters} onChange={handleFilterChange}
-        availableExchanges={availableExchanges} totalCount={spreads.length} filteredCount={totalFiltered} />
+        availableExchanges={availableExchanges} totalCount={spreads.length} filteredCount={totalFiltered}
+        confidenceFilter={confidenceFilter} onConfidenceChange={handleConfidenceChange} />
 
       {displayed.length === 0 ? (
         <div className="p-8 text-center">
@@ -366,6 +390,7 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
                   <SortableHeader label="Spread %" sortKey="spreadPercent" currentSort={sort} onSort={handleSort} align="right" />
                   <SortableHeader label="Net %" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
                   <SortableHeader label="Per $1K" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
+                  <SortableHeader label="Volume" sortKey="volume24h" currentSort={sort} onSort={handleSort} align="right" />
                   <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-text-muted">Network</th>
                   <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted">Quality</th>
                   <th className="px-3 py-2.5 w-8" />
@@ -431,6 +456,14 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
                         <td className="px-3 py-2.5 text-right">
                           <span className={clsx('mono-number font-bold', spread.profitPer1000 > 0 ? 'text-accent-green' : 'text-text-muted')}>
                             {spread.profitPer1000 > 0 ? '+' : ''}${spread.profitPer1000.toFixed(2)}
+                          </span>
+                        </td>
+
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="mono-number text-xs text-text-muted">
+                            {spread.volume24h >= 1_000_000
+                              ? `$${(spread.volume24h / 1_000_000).toFixed(1)}M`
+                              : `$${(spread.volume24h / 1_000).toFixed(0)}K`}
                           </span>
                         </td>
 

@@ -1,5 +1,65 @@
 # DEV_LOG — CryptoTracker
 
+## 2026-05-05 — Spot Arbitrage: Maximum Coverage Upgrade
+
+### Problem
+The previous implementation found too few spread links (~10) due to 5 critical bottlenecks:
+1. `maxQuantity = 0` on all exchanges that don't return `bidVolume/askVolume` in `fetchTickers()` — wiped 80%+ of all pairs
+2. Hard cap `spreadPct >= 5%` dropped real altcoin dislocations (memecoins, small-caps)
+3. `MIN_SPOT_VOLUME_USD = 50,000` — too high for valid altcoin pairs
+4. Only 9 exchanges scanned (5 more were available: Poloniex, XT.com, BitMart, BingX, Phemex)
+5. No confidence filter in UI, no volume column
+
+### Solution
+
+#### `src/config/spot-config.ts`
+- **+5 exchanges**: Poloniex, XT.com, BitMart, BingX, Phemex → total **14 exchanges**
+- Lowered `MIN_SPOT_VOLUME_USD`: 50,000 → **10,000** (catches altcoin pairs)
+- Raised `MAX_SPOT_SPREAD_PCT`: 5% → **8%** (meme/altcoin real dislocations)
+- Added `DEPTH_ESTIMATE_FACTOR = 0.005` and `MIN_EXECUTABLE_USD = 50`
+- Expanded `FALLBACK_WITHDRAW_FEES` table: 50 → **90+ tokens** (BONK, JUP, ENA, STRK, etc.)
+- Added `SPOT_NO_CURRENCIES` and `SPOT_NO_BIDS_ASKS` allowlists
+
+#### `src/utils/spot-calculator.ts` — CRITICAL FIX
+- **Depth Estimation**: when `bidVolume/askVolume = 0`, estimate depth as `volume24h × 0.5%`
+- This was the primary reason for near-zero spread count — now all pairs with real volume are evaluated
+- Per-exchange noise cap: high-noise exchanges (mexc/gate/bitmart/xt) get 8%, others 5.6%
+- Removed raw-confidence lower filter — net-spread filter handles it universally
+
+#### `src/services/spot-service.ts`
+- Added support for all 14 exchanges with proper CCXT options per exchange
+- Added `SPOT_NO_BIDS_ASKS` check to skip `fetchBidsAsks()` for unsupported exchanges
+- Crossed-book detection: skip if `bid > ask * 1.01`
+- Per-exchange ticker count logging
+
+#### `src/services/spot-collector.ts`
+- Added `SpotCollectionResult` interface with `confidenceBreakdown`, `exchangesCovered`, `totalExchanges`
+- Retry logic: if < 50 tickers returned → retry after 3s
+- Lock behavior improved: returns cache stats instead of empty zeros when already collecting
+
+#### `src/app/api/spot/spreads/route.ts`
+- Added `?min_spread=N` and `?confidence=verified,estimated` query params for server-side filtering
+- Enriched `meta` response with coverage and confidence breakdown
+
+#### `src/components/dashboard/SpotTable.tsx`
+- Added **confidence filter buttons** (All / 🟢 / 🟡 / 🔴)
+- Added **Volume** column with $K/$M formatting
+- Added `volume24h` as sortable column
+
+### Expected Results
+- Spread count: ~10 → **50-150 live opportunities**
+- Exchange coverage: 9 → 14 exchanges in spot scan
+- Build: ✅ 0 errors, 0 warnings
+
+## 2026-05-05 — Project Update & Server Launch
+- **GitHub Sync**: Pulled latest updates from the repository.
+  - Major updates in Spot Arbitrage module (`SpotTable`, `spot-calculator`, `spot-service`).
+  - New configuration file: `src/config/spot-config.ts`.
+  - Added `ROADMAP.md`.
+- **Dependencies**: Verified and updated via `npm install`.
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Status**: System is up to date and running in development mode.
+
 ## 2026-05-05 — Spot Arbitrage: Working Real-Time Tool
 
 ### Problem

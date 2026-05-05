@@ -23,11 +23,11 @@ CryptoTracker is a high-frequency data ingestion and visualization platform. It 
 ### 4. UI Architecture
 - **Real-time Tables**: High-performance tables with inline filtering and sorting using `useMemo` for efficient rendering of large datasets.
 - **Modular Shell**: A consistent layout with an adaptive sidebar (toggable icons/full view) and state-of-the-art aesthetics.
-### 5. Spot Arbitrage Engine (`src/utils/spot-calculator.ts`)
-The spot arbitrage module uses a unique **Three-Tier Confidence Model** to handle inconsistent API data across exchanges:
+The spot arbitrage module uses a unique **Three-Tier Confidence Model** combined with **Smart Depth Estimation**:
 - **🟢 Verified**: Uses real-time network fees fetched via `fetchCurrencies`. Most accurate.
-- **🟡 Estimated**: Uses a specialized fallback table (`src/config/spot-config.ts`) for top 50 assets.
-- **🔴 Raw**: Uses a percentage-based estimate (0.3% of trade value) for exotic tokens where network data is missing.
+- **🟡 Estimated**: Uses a specialized fallback table (`src/config/spot-config.ts`) for 90+ assets.
+- **🔴 Raw**: Uses a percentage-based estimate (0.3% of trade value) for exotic tokens.
+- **📈 Depth Estimation**: Since many exchanges omit order book volume in tickers, the engine estimates executable depth as 0.5% of the 24h daily volume (`DEPTH_ESTIMATE_FACTOR`), ensuring opportunities are not missed while maintaining realism.
 
 This ensures the tool provides actionable data even when exchanges restrict access to their wallet/network APIs.
 
@@ -36,7 +36,7 @@ This ensures the tool provides actionable data even when exchanges restrict acce
 ### Spot vs Futures Optimization
 The system maintains two separate service layers to avoid symbol contamination and rate-limit issues:
 - **Futures Service**: Specialized in perpetual swaps and funding rates.
-- **Spot Service**: Focuses on the 9 most reliable spot exchanges, filtering for USDT/USDC pairs and minimum volume thresholds.
+- **Spot Service**: Focuses on the 14 most reliable spot exchanges, filtering for USDT/USDC pairs and volume thresholds.
 
 ### CCXT Resilience Tweaks
 To ensure maximum exchange coverage, the service implements:

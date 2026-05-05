@@ -11,18 +11,26 @@
  *   🔴 RAW — No fee data at all, only price difference shown.
  *            Used only as a last resort for exotic tokens.
  *
- * This replaces the previous calculator that silently dropped
- * all pairs without full network data (returning 0 results).
+ * KEY FIX: Most exchanges do NOT return bidVolume/askVolume in fetchTickers().
+ * Previously this caused maxQuantity=0 → ALL pairs dropped. Now we estimate
+ * executable depth from volume24h when direct depth data is unavailable.
  */
 import type { TickerData, SpotSpreadEntry, SpotConfidence, NetworkInfo, ExchangeId } from '@/types';
 import { normalizeSymbol } from '@/utils/crypto';
 import {
   SPOT_TAKER_FEES,
   FALLBACK_WITHDRAW_FEES,
+  DEFAULT_FALLBACK_WITHDRAW_FEE_USD,
   MIN_SPOT_SPREAD_PCT,
+  MAX_SPOT_SPREAD_PCT,
   HOT_SPREAD_THRESHOLD,
   WARM_SPREAD_THRESHOLD,
+  DEPTH_ESTIMATE_FACTOR,
+  MIN_EXECUTABLE_USD,
 } from '@/config/spot-config';
+
+// Re-export for components that import from here
+export { HOT_SPREAD_THRESHOLD, WARM_SPREAD_THRESHOLD };
 
 // === Normalized ticker with computed fields ===
 interface NormTicker extends TickerData {
@@ -54,6 +62,7 @@ export function calculateSpotSpreads(
       normPrice: t.last / multiplier,
       normBid: t.bid / multiplier,
       normAsk: t.ask / multiplier,
+      // Normalize bid/ask volumes by multiplier (e.g., 1000PEPE → per-PEPE)
       normBidVolume: t.bidVolume * multiplier,
       normAskVolume: t.askVolume * multiplier,
       baseAsset: asset,
@@ -77,7 +86,7 @@ export function calculateSpotSpreads(
     }
   }
 
-  // 3. Sort by net profit descending
+  // 3. Sort by net spread descending
   return spreads.sort((a, b) => b.netSpreadPercent - a.netSpreadPercent);
 }
 
@@ -96,24 +105,44 @@ function evaluateDirection(
   const spreadAbs = sellTick.normBid - buyTick.normAsk;
   const spreadPct = (spreadAbs / buyTick.normAsk) * 100;
 
-  // Sanity: skip impossible spreads (>5% is usually different contract/junk data)
-  if (spreadPct >= 5 || spreadPct < MIN_SPOT_SPREAD_PCT) return;
+  // Sanity: skip if spread is below minimum (noise)
+  if (spreadPct < MIN_SPOT_SPREAD_PCT) return;
 
-  // Volume: use the smaller side's available depth
-  const buyVolume = buyTick.normAskVolume;
-  const sellVolume = sellTick.normBidVolume;
-  const maxQuantity = Math.min(buyVolume, sellVolume);
+  // Sanity: skip impossibly large spreads (usually different contract / stale data).
+  // Use a per-exchange relaxed cap for known high-noise markets (mexc, gate, bitmart, xt).
+  const highNoiseExchanges = new Set(['mexc', 'gate', 'bitmart', 'xt']);
+  const cap = (highNoiseExchanges.has(buyTick.exchange) || highNoiseExchanges.has(sellTick.exchange))
+    ? MAX_SPOT_SPREAD_PCT        // 8% — these can have genuine large dislocations
+    : MAX_SPOT_SPREAD_PCT * 0.7; // 5.6% for premium exchanges
 
-  // Require at least $10 in executable volume
-  if (maxQuantity * buyTick.normAsk < 10) return;
+  if (spreadPct > cap) return;
 
+  // === CRITICAL FIX: Depth Estimation ===
+  // Most exchanges return bidVolume/askVolume = 0 in fetchTickers().
+  // Estimate executable depth as DEPTH_ESTIMATE_FACTOR of daily volume.
+  const buyVolumeUsd  = buyTick.normAskVolume > 0
+    ? buyTick.normAskVolume * buyTick.normAsk     // Real order book depth in USD
+    : buyTick.volume24h * DEPTH_ESTIMATE_FACTOR;  // Estimated: 0.5% of daily turnover
+
+  const sellVolumeUsd = sellTick.normBidVolume > 0
+    ? sellTick.normBidVolume * sellTick.normBid
+    : sellTick.volume24h * DEPTH_ESTIMATE_FACTOR;
+
+  // Executable depth = smaller of the two sides, in USD
+  const executableUsd = Math.min(buyVolumeUsd, sellVolumeUsd);
+
+  // Skip if no meaningful volume (genuine thin market)
+  if (executableUsd < MIN_EXECUTABLE_USD) return;
+
+  // Convert back to token quantity for fee calculations
+  const maxQuantity = executableUsd / buyTick.normAsk;
   const estimatedProfit = maxQuantity * spreadAbs;
 
   // Trading fees (spot taker fees, stored as % like 0.10)
-  const buyFeeRate = (SPOT_TAKER_FEES[buyTick.exchange] ?? 0.10) / 100;
+  const buyFeeRate  = (SPOT_TAKER_FEES[buyTick.exchange]  ?? 0.10) / 100;
   const sellFeeRate = (SPOT_TAKER_FEES[sellTick.exchange] ?? 0.10) / 100;
   const tradingFeesUsd =
-    (maxQuantity * buyTick.normAsk * buyFeeRate) +
+    (maxQuantity * buyTick.normAsk  * buyFeeRate) +
     (maxQuantity * sellTick.normBid * sellFeeRate);
 
   // === Determine withdrawal fee and confidence ===
@@ -129,37 +158,29 @@ function evaluateDirection(
   const netProfit = estimatedProfit - tradingFeesUsd - withdrawFeeUsd;
 
   // Net spread % (what you actually earn)
-  const totalCostPct = ((tradingFeesUsd + withdrawFeeUsd) / (maxQuantity * buyTick.normAsk)) * 100;
-  const netSpreadPct = spreadPct - totalCostPct;
+  const totalCostPct   = ((tradingFeesUsd + withdrawFeeUsd) / (maxQuantity * buyTick.normAsk)) * 100;
+  const netSpreadPct   = spreadPct - totalCostPct;
+  const profitPer1000  = (netSpreadPct / 100) * 1000;
 
-  // Profit per $1000 capital deployed
-  const profitPer1000 = (netSpreadPct / 100) * 1000;
-
-  // Filter: only show actionable opportunities
-  if (confidence === 'raw') {
-    // Raw: needs positive net spread AND at least 0.3% gross AND max 3% (avoid junk)
-    if (spreadPct < 0.3 || spreadPct > 3.0 || netSpreadPct < 0) return;
-  } else {
-    // Verified/Estimated: only show net-positive opportunities
-    if (netSpreadPct < 0) return;
-  }
+  // Filter: only show opportunities with positive net spread
+  if (netSpreadPct < 0) return;
 
   spreads.push({
-    symbol: normSymbol,
-    buyExchange: buyTick.exchange,
-    sellExchange: sellTick.exchange,
-    buyPrice: buyTick.normAsk,
-    sellPrice: sellTick.normBid,
-    spreadPercent: spreadPct,
-    spreadAbsolute: spreadAbs,
-    volume24h: Math.min(buyTick.volume24h, sellTick.volume24h),
-    buyVolume,
-    sellVolume,
+    symbol:          normSymbol,
+    buyExchange:     buyTick.exchange,
+    sellExchange:    sellTick.exchange,
+    buyPrice:        buyTick.normAsk,
+    sellPrice:       sellTick.normBid,
+    spreadPercent:   spreadPct,
+    spreadAbsolute:  spreadAbs,
+    volume24h:       Math.min(buyTick.volume24h, sellTick.volume24h),
+    buyVolume:       buyVolumeUsd / buyTick.normAsk,
+    sellVolume:      sellVolumeUsd / sellTick.normBid,
     maxQuantity,
     estimatedProfit,
-    timestamp: Date.now(),
+    timestamp:       Date.now(),
     withdrawNetwork,
-    depositNetwork: withdrawNetwork,
+    depositNetwork:  withdrawNetwork,
     withdrawFeeUsd,
     netProfit,
     confidence,
@@ -184,7 +205,7 @@ function resolveWithdrawFee(
   priceUsd: number,
   currencies: Record<ExchangeId, Record<string, NetworkInfo[]>>
 ): WithdrawResult {
-  const buyExNets = currencies[buyExchange]?.[baseAsset] || [];
+  const buyExNets  = currencies[buyExchange]?.[baseAsset]  || [];
   const sellExNets = currencies[sellExchange]?.[baseAsset] || [];
 
   // === Tier 1: VERIFIED — Both exchanges have network data ===
@@ -212,7 +233,7 @@ function resolveWithdrawFee(
     if (bestNetwork && minWithdrawFeeUsd < Infinity) {
       return {
         withdrawFeeUsd: minWithdrawFeeUsd,
-        confidence: 'verified',
+        confidence:     'verified',
         withdrawNetwork: bestNetwork,
       };
     }
@@ -223,21 +244,19 @@ function resolveWithdrawFee(
   if (fallbackFeeTokens !== undefined) {
     const feeUsd = fallbackFeeTokens * priceUsd;
     return {
-      withdrawFeeUsd: feeUsd,
-      confidence: 'estimated',
+      withdrawFeeUsd:  feeUsd,
+      confidence:      'estimated',
       withdrawNetwork: guessNetwork(baseAsset),
     };
   }
 
-  // === Tier 3: RAW — Use percentage-based estimate ===
-  // For unknown tokens, estimate withdrawal fee as ~0.3% of trade value
-  // This is more realistic than a flat USD amount for cheap tokens
-  const estimatedFeeUsd = priceUsd * 0.003; // ~0.3% of token price as fee
-  const minRawFee = Math.max(estimatedFeeUsd, 0.50); // At least $0.50
-  const maxRawFee = Math.min(minRawFee, 10.0); // Cap at $10
+  // === Tier 3: RAW — Use conservative percentage-based estimate ===
+  // ~0.3% of token price as fee estimate, capped between $0.5 and $10
+  const estimatedFeeUsd = priceUsd * 0.003;
+  const rawFee = Math.min(Math.max(estimatedFeeUsd, DEFAULT_FALLBACK_WITHDRAW_FEE_USD), 10.0);
   return {
-    withdrawFeeUsd: maxRawFee,
-    confidence: 'raw',
+    withdrawFeeUsd:  rawFee,
+    confidence:      'raw',
     withdrawNetwork: undefined,
   };
 }
@@ -252,35 +271,47 @@ function networksMatch(a: string, b: string): boolean {
 // === Guess common network for a token ===
 function guessNetwork(asset: string): string {
   const NETWORK_MAP: Record<string, string> = {
-    BTC: 'BTC',
-    ETH: 'ERC20',
-    SOL: 'SOL',
-    XRP: 'XRP',
-    ADA: 'ADA',
-    DOGE: 'DOGE',
-    DOT: 'DOT',
-    AVAX: 'AVAXC',
-    LINK: 'ERC20',
-    NEAR: 'NEAR',
-    SUI: 'SUI',
-    APT: 'APT',
-    ARB: 'ARBITRUM',
-    OP: 'OPTIMISM',
-    MATIC: 'POLYGON',
-    POL: 'POLYGON',
-    TON: 'TON',
-    TRX: 'TRC20',
-    USDT: 'TRC20',
-    USDC: 'TRC20',
-    LTC: 'LTC',
-    ATOM: 'COSMOS',
-    SEI: 'SEI',
-    TIA: 'CELESTIA',
-    INJ: 'INJECTIVE',
-    PEPE: 'ERC20',
-    WIF: 'SOL',
-    NOT: 'TON',
-    SHIB: 'ERC20',
+    BTC:    'BTC',
+    ETH:    'ERC20',
+    SOL:    'SOL',
+    XRP:    'XRP',
+    ADA:    'ADA',
+    DOGE:   'DOGE',
+    DOT:    'DOT',
+    AVAX:   'AVAXC',
+    LINK:   'ERC20',
+    NEAR:   'NEAR',
+    SUI:    'SUI',
+    APT:    'APT',
+    ARB:    'ARBITRUM',
+    OP:     'OPTIMISM',
+    MATIC:  'POLYGON',
+    POL:    'POLYGON',
+    TON:    'TON',
+    TRX:    'TRC20',
+    USDT:   'TRC20',
+    USDC:   'TRC20',
+    LTC:    'LTC',
+    ATOM:   'COSMOS',
+    SEI:    'SEI',
+    TIA:    'CELESTIA',
+    INJ:    'INJECTIVE',
+    PEPE:   'ERC20',
+    WIF:    'SOL',
+    NOT:    'TON',
+    SHIB:   'ERC20',
+    BONK:   'SOL',
+    JUP:    'SOL',
+    JTO:    'SOL',
+    PYTH:   'SOL',
+    FLOKI:  'BSC',
+    CAKE:   'BSC',
+    GMT:    'SOL',
+    STX:    'STX',
+    STRK:   'STARKNET',
+    RENDER: 'SOL',
+    ORDI:   'BTC',
+    ICP:    'ICP',
   };
-  return NETWORK_MAP[asset] || 'Unknown';
+  return NETWORK_MAP[asset] || 'ERC20';
 }

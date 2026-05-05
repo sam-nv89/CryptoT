@@ -142,7 +142,7 @@ export default function SpotArbitragePage() {
       <div className="glass-card p-4 text-xs text-text-muted">
         <h4 className="font-semibold text-text-secondary mb-2 uppercase tracking-wider">Important Notice</h4>
         <p>
-          This tool scans 9 exchanges (Binance, Bybit, OKX, KuCoin, Gate.io, MEXC, Bitget, HTX, CoinEx) for spot price
+          This tool scans <strong className="text-text-secondary">14 exchanges</strong> (Binance, Bybit, OKX, KuCoin, Gate.io, MEXC, Bitget, HTX, CoinEx, Poloniex, XT.com, BitMart, BingX, Phemex) for spot price
           differences. &quot;Verified&quot; spreads use real withdrawal fee data from exchange APIs. &quot;Estimated&quot; spreads
           use statistical averages — always verify fees before executing trades. Prices update every 30 seconds.
         </p>
