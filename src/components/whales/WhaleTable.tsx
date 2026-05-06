@@ -29,8 +29,8 @@ export const WhaleTable: React.FC<Props> = ({ whales }) => {
         valA = a.balanceUsd;
         valB = b.balanceUsd;
       } else if (sortKey === 'avgProfit') {
-        valA = a.analytics.totalPnL / (a.analytics.totalTrades || 1);
-        valB = b.analytics.totalPnL / (b.analytics.totalTrades || 1);
+        valA = a.analytics.totalTrades > 0 ? a.analytics.totalPnL / a.analytics.totalTrades : 0;
+        valB = b.analytics.totalTrades > 0 ? b.analytics.totalPnL / b.analytics.totalTrades : 0;
       } else {
         valA = a.analytics[sortKey as keyof typeof a.analytics] as number;
         valB = b.analytics[sortKey as keyof typeof b.analytics] as number;
@@ -75,7 +75,8 @@ export const WhaleTable: React.FC<Props> = ({ whales }) => {
           </thead>
           <tbody className="divide-y divide-white/[0.05]">
             {sortedWhales.map((whale) => {
-              const avgProfit = whale.analytics.totalPnL / (whale.analytics.totalTrades || 1);
+              const hasTrades = whale.analytics.totalTrades > 0;
+              const avgProfit = hasTrades ? (whale.analytics.totalPnL / whale.analytics.totalTrades) : 0;
               
               return (
                 <tr key={whale.id} className="hover:bg-white/[0.02] transition-colors group">
@@ -101,16 +102,20 @@ export const WhaleTable: React.FC<Props> = ({ whales }) => {
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className={`font-mono text-sm font-medium ${whale.analytics.totalPnL >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-                      {whale.analytics.totalPnL >= 0 ? '+' : ''}
+                    <div className={`font-mono text-sm font-medium ${whale.analytics.totalPnL > 0 ? 'text-success-400' : whale.analytics.totalPnL < 0 ? 'text-danger-400' : 'text-text-muted'}`}>
+                      {whale.analytics.totalPnL > 0 ? '+' : ''}
                       ${Math.abs(whale.analytics.totalPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                     </div>
                   </td>
                   <td className="px-6 py-4">
-                    <div className={`font-mono text-sm ${avgProfit >= 0 ? 'text-success-400/80' : 'text-danger-400/80'}`}>
-                      {avgProfit >= 0 ? '+' : ''}
-                      ${Math.abs(avgProfit).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </div>
+                    {hasTrades ? (
+                      <div className={`font-mono text-sm ${avgProfit > 0 ? 'text-success-400/80' : avgProfit < 0 ? 'text-danger-400/80' : 'text-text-muted'}`}>
+                        {avgProfit > 0 ? '+' : ''}
+                        ${Math.abs(avgProfit).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                      </div>
+                    ) : (
+                      <div className="font-mono text-sm text-text-muted">N/A</div>
+                    )}
                   </td>
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">

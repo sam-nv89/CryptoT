@@ -147,9 +147,12 @@ class WhaleService {
     let totalPnL = 0;
     let winRate = 0;
     let totalTrades = 0;
+    let totalUsdInvested = 0;
+    let profitableTokens = 0;
+    let totalTradedTokens = 0;
 
     if (whaleDef.network === 'SOL') {
-      // Solana Logic
+      // Solana Logic - Native APIs for PnL not available in free tier, keep basic estimations but flag it in UI conceptually
       const portfolio = await this.fetchMoralisSolana<any>(`${whaleDef.chainParam}/${whaleDef.address}/portfolio`);
       let solBalance = 0;
       if (portfolio?.nativeBalance?.solana) {
@@ -158,55 +161,47 @@ class WhaleService {
       
       const mockSolPrice = 145; // Approximate SOL price
       balanceUsd = solBalance * mockSolPrice;
+      balanceUsd += (balanceUsd * 0.2); // Small bump for SPL tokens
       
-      // We don't have total USD from Moralis free endpoint for SPL tokens directly, 
-      // adding random multiplier to represent SPL token bags
-      balanceUsd += (balanceUsd * (Math.random() * 0.5)); 
-
-      // PnL для Соланы симулируется пропорционально балансу, так как нет endpoint'а рентабельности
-      totalPnL = balanceUsd * (0.05 + Math.random() * 0.15); // 5% to 20% profit
-      winRate = 40 + Math.random() * 35; // 40-75% winrate
-      totalTrades = Math.floor(Math.random() * 300) + 20;
+      // We don't have PnL for Solana via free API, so we leave it as 0 to maintain high data quality,
+      // instead of faking millions of dollars.
+      totalPnL = 0;
+      winRate = 0;
+      totalTrades = 0;
+      totalUsdInvested = 0;
     } else {
       // EVM Logic
-      // Важно: исключаем спам и неверифицированные контракты, иначе airdrop-токены с фейковой ликвидностью
-      // могут показать баланс в секстиллионы долларов.
       const netWorthData = await this.fetchMoralis<any>(`wallets/{address}/net-worth?chain=${whaleDef.chainParam}&exclude_spam=true&exclude_unverified_contracts=true`, whaleDef.address);
       balanceUsd = netWorthData?.total_networth_usd ? parseFloat(netWorthData.total_networth_usd) : 0;
 
       const profitData = await this.fetchMoralis<any>(`wallets/{address}/profitability?chain=${whaleDef.chainParam}`, whaleDef.address);
       if (profitData && profitData.result && profitData.result.length > 0) {
-        let profitableTokens = 0;
         profitData.result.forEach((token: any) => {
+          // Игнорируем токены помеченные как спам
+          if (token.possible_spam === true) return;
+          
           const profit = parseFloat(token.realized_profit_usd || '0');
+          const invested = parseFloat(token.total_usd_invested || '0');
+          
           totalPnL += profit;
-          if (profit > 0) profitableTokens++;
+          totalUsdInvested += invested;
           totalTrades += parseInt(token.count_of_trades || '0', 10);
+          
+          totalTradedTokens++;
+          if (profit > 0) profitableTokens++;
         });
-        winRate = profitData.result.length > 0 ? (profitableTokens / profitData.result.length) * 100 : 0;
+        
+        winRate = totalTradedTokens > 0 ? (profitableTokens / totalTradedTokens) * 100 : 0;
       }
     }
 
-    // Если кошелек - это биржа (CEX), то у него нет "торгового PnL" в привычном понимании
     const isExchange = whaleDef.tags.includes('Exchange') || whaleDef.tags.includes('CEX');
-    
-    let finalWinRate = winRate;
-    let finalPnL = totalPnL;
-
     if (isExchange) {
-      finalWinRate = 0;
-      finalPnL = 0;
-    } else {
-      // Так как мы отфильтровали спам-токены и балансы теперь реальные (от $1M до $100M+),
-      // заглушка 5-20% даст реалистичные китовые PnL (сотни тысяч и миллионы долларов),
-      // а не искусственный лимит в $60k.
-      if (finalPnL === 0) {
-        finalPnL = balanceUsd * (0.05 + Math.random() * 0.15);
-      }
-      if (finalWinRate === 0) {
-        finalWinRate = 45 + Math.random() * 30;
-      }
+      winRate = 0;
+      totalPnL = 0;
+      totalUsdInvested = 0;
     }
+
     return {
       id: this.generateIdFromAddress(whaleDef.address, whaleDef.network),
       address: whaleDef.address,
@@ -215,14 +210,14 @@ class WhaleService {
       lastActive: new Date().toISOString(),
       balanceUsd: balanceUsd,
       analytics: {
-        winRate: finalWinRate,
-        riskRewardRatio: 1.5 + Math.random() * 2,
-        totalPnL: finalPnL,
-        recent30dPnL: finalPnL * 0.2,
-        recent7dPnL: finalPnL * 0.05,
-        averageHoldTimeDays: Math.random() * 60 + 10,
-        tradingExperienceDays: Math.random() * 1000 + 300,
-        totalTrades: totalTrades > 0 ? totalTrades : Math.floor(Math.random() * 500 + 50)
+        winRate: winRate,
+        totalPnL: totalPnL,
+        totalUsdInvested: totalUsdInvested,
+        recent30dPnL: totalPnL * 0.2, // Simulated fraction as API lacks timeframe
+        recent7dPnL: totalPnL * 0.05,
+        profitableTokens: profitableTokens,
+        totalTradedTokens: totalTradedTokens,
+        totalTrades: totalTrades
       }
     };
   }
@@ -303,7 +298,7 @@ class WhaleService {
     
     const totalTracked = activeWhales.length;
     const avgWinRate = activeWhales.reduce((acc, w) => acc + w.analytics.winRate, 0) / (totalTracked || 1);
-    const avgRR = activeWhales.reduce((acc, w) => acc + w.analytics.riskRewardRatio, 0) / (totalTracked || 1);
+    const totalProfit = activeWhales.reduce((acc, w) => acc + w.analytics.totalPnL, 0);
     
     // Find top network
     const networkCounts: Record<string, number> = {};
@@ -315,7 +310,7 @@ class WhaleService {
     return {
       totalTracked,
       avgWinRate,
-      avgRR,
+      totalProfit,
       topNetwork
     };
   }

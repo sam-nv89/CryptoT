@@ -31,29 +31,32 @@ export const WhaleAnalyticsGrid: React.FC<Props> = ({ analytics }) => {
         </div>
       </div>
 
-      {/* Risk / Reward Card */}
+      {/* Total Invested Card */}
       <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Risk / Reward</h3>
+          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Total Invested</h3>
           <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
             <Scale size={16} />
           </div>
         </div>
         
         <div className="flex items-end gap-2 mb-2">
-          <span className="text-4xl font-bold text-text-primary">{analytics.riskRewardRatio.toFixed(2)}</span>
-          <span className="text-text-muted mb-1 pb-1">Ratio</span>
+          <span className="text-3xl font-bold font-mono tracking-tight text-text-primary">
+            ${analytics.totalUsdInvested > 1000000 
+                ? (analytics.totalUsdInvested / 1000000).toFixed(2) + 'M' 
+                : analytics.totalUsdInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+          </span>
         </div>
         
         <p className="text-sm text-text-muted">
-          Avg Profit per win vs Avg Loss
+          Lifetime volume invested in tokens
         </p>
       </div>
 
       {/* Recent PnL Card */}
       <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">30D PnL</h3>
+          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Estimated 30D PnL</h3>
           <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
             <TrendingUp size={16} />
           </div>
@@ -75,10 +78,10 @@ export const WhaleAnalyticsGrid: React.FC<Props> = ({ analytics }) => {
         </div>
       </div>
 
-      {/* Experience Card */}
+      {/* Trading Activity Card */}
       <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Experience</h3>
+          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Trading Activity</h3>
           <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
             <Clock size={16} />
           </div>
@@ -86,17 +89,13 @@ export const WhaleAnalyticsGrid: React.FC<Props> = ({ analytics }) => {
         
         <div className="flex items-end gap-2 mb-2">
           <span className="text-4xl font-bold text-text-primary">
-            {Math.floor(analytics.tradingExperienceDays / 365)}
+            {analytics.totalTrades}
           </span>
-          <span className="text-text-muted mb-1 pb-1">Years</span>
-          <span className="text-2xl font-bold text-text-primary ml-2">
-            {Math.floor((analytics.tradingExperienceDays % 365) / 30)}
-          </span>
-          <span className="text-text-muted mb-1 pb-1">Months</span>
+          <span className="text-text-muted mb-1 pb-1">Trades</span>
         </div>
         
         <p className="text-sm text-text-muted">
-          Avg Hold Time: <span className="text-text-primary">{Math.round(analytics.averageHoldTimeDays)} Days</span>
+          Profitable Tokens: <span className="text-success-400 font-medium">{analytics.profitableTokens}</span> / {analytics.totalTradedTokens}
         </p>
       </div>
 

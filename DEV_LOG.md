@@ -1,4 +1,13 @@
 # DEV_LOG — CryptoTracker
+ 
+## [2026-05-06] Whale Tracker: 100% Data Accuracy & UI Polish (v2)
+- [x] **Data Authenticity (Zero Mocking)**: Removed all simulated metrics (PnL, Experience, Risk/Reward). The platform now relies 100% on the Moralis `profitability` endpoint to calculate absolute realized profit, total trades, and total invested USD.
+- [x] **Accurate WinRate & PnL Calculation**: Aggregation logic in `whale-service.ts` heavily refactored to sum `realized_profit_usd` from each traded token. WinRate is now calculated based strictly on profitable tokens vs total traded tokens.
+- [x] **UI Polish & Error Handling**: 
+  - Overhauled `WhaleAnalyticsGrid.tsx` to display real `Total Invested` and `Trading Activity` metrics instead of simulated ones.
+  - Refined `WhaleTable.tsx` to gracefully handle `0` trade counts to avoid division-by-zero errors in the Avg Profit column.
+  - Re-mapped Global Statistics to show `Total Tracked Profit` instead of fake `Avg Risk/Reward`.
+- [x] **Build Validation**: Verified application builds successfully via `npm run build` with the latest strict TypeScript interfaces.
 
 ## [2026-05-06] Whale Tracker: Data Accuracy & UI Polish
 - [x] **UI Dropdown Upgrade**: Replaced native `<select>` with a premium custom dropdown in `WhaleSearchBar`. Added glassmorphism, animations, and better UX.

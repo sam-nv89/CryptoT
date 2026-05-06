@@ -28,11 +28,11 @@ export const WhaleStatsOverview: React.FC = () => {
         subtitle="+1.2% vs avg"
       />
       <StatsCard
-        title="Avg Risk/Reward"
-        value={stats ? `${stats.avgRR.toFixed(1)} R` : '...'}
+        title="Total Tracked Profit"
+        value={stats ? `$${(stats.totalProfit > 1000000 ? (stats.totalProfit / 1000000).toFixed(1) + 'M' : stats.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 }))}` : '...'}
         icon={<BarChart3 />}
         accentColor="amber"
-        subtitle="Healthy"
+        subtitle="Realized PnL"
       />
       <StatsCard
         title="Top Network"

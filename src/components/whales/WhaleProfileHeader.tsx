@@ -60,8 +60,8 @@ export const WhaleProfileHeader: React.FC<Props> = ({ whale }) => {
         
         <div className="text-right flex-shrink-0">
           <div className="text-sm text-text-muted mb-1">Total PnL</div>
-          <div className={`text-4xl font-bold font-mono tracking-tight ${whale.analytics.totalPnL >= 0 ? 'text-success-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]' : 'text-danger-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.3)]'}`}>
-            {whale.analytics.totalPnL >= 0 ? '+' : ''}
+          <div className={`text-4xl font-bold font-mono tracking-tight ${whale.analytics.totalPnL > 0 ? 'text-success-400 drop-shadow-[0_0_10px_rgba(74,222,128,0.3)]' : whale.analytics.totalPnL < 0 ? 'text-danger-400 drop-shadow-[0_0_10px_rgba(248,113,113,0.3)]' : 'text-text-muted'}`}>
+            {whale.analytics.totalPnL > 0 ? '+' : ''}
             ${Math.abs(whale.analytics.totalPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
           </div>
         </div>

@@ -8,6 +8,7 @@ A premium cryptocurrency monitoring dashboard designed for real-time tracking of
 - **Futures Arbitrage & Funding**: Real-time comparison of funding rates and perpetual futures spreads.
 - **Dynamic Market Discovery**: Automatic scanning and mapping of 700+ assets across 18+ exchanges.
 - **Smart Fee Calculation**: Intelligent net-profit estimation factoring in trading fees and network withdrawal costs.
+- **Whale Tracker (v2)**: Advanced on-chain monitoring with 100% real PnL, WinRate, and investment analytics powered by Moralis DeFi API.
 - **Premium UX**: Professional-grade dashboard with glassmorphism, real-time "flash" updates, and sound alerts for high-yield signals.
 
 ## 🏛 Supported Exchanges

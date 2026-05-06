@@ -1,14 +1,14 @@
 export type WhaleNetwork = 'ETH' | 'SOL' | 'BTC' | 'BSC' | 'ARB' | 'MANTLE' | 'ZKSYNC' | 'APTOS';
 
 export interface WhaleAnalytics {
-  winRate: number; // Percentage (0-100)
-  riskRewardRatio: number; // e.g., 2.5
-  totalPnL: number; // In USD
-  recent30dPnL: number; // In USD
-  recent7dPnL: number; // In USD
-  averageHoldTimeDays: number;
-  tradingExperienceDays: number;
-  totalTrades: number;
+  winRate: number; // Percentage (0-100) based on profitable tokens vs total traded tokens
+  totalPnL: number; // In USD (Realized Profit)
+  totalUsdInvested: number; // Total USD invested in tokens
+  recent30dPnL: number; // Simulated based on a fraction for now, as API only gives lifetime
+  recent7dPnL: number; 
+  profitableTokens: number;
+  totalTradedTokens: number;
+  totalTrades: number; // count_of_trades
 }
 
 export interface WhaleProfile {
