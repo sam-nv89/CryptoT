@@ -15,7 +15,7 @@ import type { ExchangeId } from '@/types';
 export const SPOT_EXCHANGES: ExchangeId[] = [
   'binance', 'bybit', 'okx', 'kucoin', 'gate', 'mexc',
   'bitget', 'htx', 'coinex', 'poloniex', 'xt', 'bitmart',
-  'bingx', 'phemex',
+  'bingx', 'phemex', 'lighter', 'vertex',
 ];
 
 // CCXT class IDs for spot mode (NOT futures classes like binanceusdm)
@@ -34,16 +34,17 @@ export const SPOT_CCXT_MAP: Record<string, string> = {
   bitmart:  'bitmart',
   bingx:    'bingx',
   phemex:   'phemex',
+  lighter:  'lighter',
 };
 
 // Exchanges that do NOT support fetchCurrencies (skip to avoid errors)
 export const SPOT_NO_CURRENCIES: string[] = [
-  'gate', 'mexc', 'bitmart', 'ascendex', 'poloniex', 'xt', 'bingx', 'phemex',
+  'gate', 'mexc', 'bitmart', 'ascendex', 'poloniex', 'xt', 'bingx', 'phemex', 'lighter', 'vertex',
 ];
 
 // Exchanges that do NOT support fetchBidsAsks (use ticker bid/ask instead)
 export const SPOT_NO_BIDS_ASKS: string[] = [
-  'poloniex', 'xt', 'bitmart', 'bingx', 'phemex', 'coinex', 'htx',
+  'poloniex', 'xt', 'bitmart', 'bingx', 'phemex', 'coinex', 'htx', 'lighter', 'vertex',
 ];
 
 // === Spot Taker Fees (%) — typically higher than futures ===
@@ -63,6 +64,8 @@ export const SPOT_TAKER_FEES: Record<string, number> = {
   bitmart:  0.25,
   bingx:    0.10,
   phemex:   0.10,
+  lighter:  0.02, // Extremely low fees on Lighter
+  vertex:   0.02, // Low fees on Vertex
 };
 
 // === Fallback Withdrawal Fees (in token units) ===
@@ -183,10 +186,9 @@ export const MIN_SPOT_SPREAD_PCT = 0.03;
 
 /**
  * Maximum gross spread % for sanity check.
- * Raised from 5% → 8% to catch real meme/altcoin dislocations.
- * Exchanges with high listing noise (mexc/gate) get their own cap internally.
+ * Raised to 20% to catch real meme/altcoin dislocations.
  */
-export const MAX_SPOT_SPREAD_PCT = 8.0;
+export const MAX_SPOT_SPREAD_PCT = 20.0;
 
 /** Spread above this is flagged as HOT */
 export const HOT_SPREAD_THRESHOLD = 0.30;
@@ -212,4 +214,10 @@ export const SPOT_CACHE_BG_REFRESH_MS = 25_000;
 export const DEPTH_ESTIMATE_FACTOR = 0.005;
 
 /** Minimum USD executable volume to show a spread (after depth estimation) */
-export const MIN_EXECUTABLE_USD = 50;
+export const MIN_EXECUTABLE_USD = 10;
+
+/** Maximum number of spreads to show per unique symbol (prevents one coin from dominating) */
+export const MAX_SPREADS_PER_SYMBOL = 5;
+
+/** Minimum net spread % for RAW signals (allow slightly negative to show potential) */
+export const NET_SPREAD_RAW_MIN = -0.15;

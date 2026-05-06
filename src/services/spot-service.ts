@@ -18,6 +18,58 @@ import {
   MIN_SPOT_VOLUME_USD,
 } from '@/config/spot-config';
 
+/**
+ * Vertex Market Data Fetcher (Native)
+ * Vertex is not in CCXT, so we use their public Market Data API.
+ */
+async function fetchVertexTickers(): Promise<TickerData[]> {
+  try {
+    const url = 'https://archive.prod.vertexprotocol.com/v1/tickers';
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0' },
+      next: { revalidate: 10 } // Cache for 10s
+    });
+    
+    if (!response.ok) throw new Error(`Vertex API error: ${response.status}`);
+    const data = await response.json();
+    const results: TickerData[] = [];
+
+    for (const [vSymbol, ticker] of Object.entries(data)) {
+      // Vertex spot symbols are formatted as "ASSET-QUOTE_SPOT"
+      if (!vSymbol.endsWith('_SPOT')) continue;
+      
+      const [base, rest] = vSymbol.split('-');
+      const quote = rest.replace('_SPOT', '');
+      const symbol = `${base}/${quote}`;
+
+      const t = ticker as any;
+      const last = parseFloat(t.last_price);
+      const bid = parseFloat(t.bid);
+      const ask = parseFloat(t.ask);
+      const quoteVolume = parseFloat(t.quote_volume || '0');
+
+      if (!bid || !ask || !last || quoteVolume < MIN_SPOT_VOLUME_USD) continue;
+
+      results.push({
+        exchange: 'vertex',
+        symbol,
+        bid,
+        ask,
+        last,
+        volume24h: quoteVolume,
+        bidVolume: 0, // Not available in ticker summary
+        askVolume: 0,
+        timestamp: Date.now(),
+      });
+    }
+
+    return results;
+  } catch (err) {
+    console.warn('[SpotService] Vertex fetch failed:', (err as Error).message);
+    return [];
+  }
+}
+
 // === Exchange Instance Pool for Spot ===
 
 const spotInstances = new Map<string, Exchange>();
@@ -47,6 +99,10 @@ function getSpotInstance(exchangeId: string): Exchange {
         break;
       case 'phemex':
         // Phemex spot market uses non-standard API path
+        (options.options as Record<string, unknown>)['defaultType'] = 'spot';
+        break;
+      case 'lighter':
+        // Lighter defaults to swap, force spot
         (options.options as Record<string, unknown>)['defaultType'] = 'spot';
         break;
     }
@@ -120,7 +176,9 @@ export async function fetchSpotCurrencies(): Promise<Record<ExchangeId, Record<s
 
 // === Fetch Spot Tickers ===
 
-export async function fetchSpotTickers(): Promise<TickerData[]> {
+export async function fetchSpotTickers(
+  currencies?: Record<ExchangeId, Record<string, NetworkInfo[]>>
+): Promise<TickerData[]> {
   const results: TickerData[] = [];
   const start = Date.now();
   const exchangeStats: Record<string, number> = {};
@@ -149,6 +207,24 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
         }
       }
 
+      // Special handling for Lighter: it doesn't have bid/ask in tickers
+      if (exchangeId === 'lighter') {
+        const lighterSymbols = Object.keys(tickers).filter(s => s.includes('/USDC') && !s.includes(':'));
+        const obTasks = lighterSymbols.map(async (sym) => {
+          try {
+            const ob = await exchange.fetchOrderBook(sym, 5);
+            bidsAsks[sym] = {
+              bid: ob.bids[0]?.[0],
+              ask: ob.asks[0]?.[0],
+              bidVolume: ob.bids[0]?.[1],
+              askVolume: ob.asks[0]?.[1],
+              timestamp: ob.timestamp,
+            };
+          } catch { /* skip failed pair */ }
+        });
+        await Promise.allSettled(obTasks);
+      }
+
       let addedCount = 0;
 
       for (const [symbol, ticker] of Object.entries(tickers)) {
@@ -173,10 +249,22 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
 
         const bidVolume  = (book.bidVolume  as number | undefined) ?? (t.bidVolume  as number | undefined) ?? 0;
         const askVolume  = (book.askVolume  as number | undefined) ?? (t.askVolume  as number | undefined) ?? 0;
-        const quoteVolume = (t.quoteVolume as number | undefined) ?? (t.baseVolume as number | undefined) ?? 0;
+        
+        // FIX: CCXT often returns quoteVolume=undefined but baseVolume exists.
+        // baseVolume is in tokens, so we multiply by last price to get USD.
+        let quoteVolume = (t.quoteVolume as number | undefined) ?? (t.baseVolume as number | undefined) ?? 0;
+        if ((!t.quoteVolume || t.quoteVolume === 0) && (t.baseVolume && (t.baseVolume as number) > 0)) {
+          quoteVolume = (t.baseVolume as number) * last;
+        }
 
         // Filter out ultra-low volume pairs (genuine noise)
         if (quoteVolume < MIN_SPOT_VOLUME_USD) continue;
+
+        // Enrich with deposit/withdraw status if available
+        const baseAsset = symbol.split('/')[0];
+        const exNets = currencies?.[exchangeId as ExchangeId]?.[baseAsset] || [];
+        const depositOpen = exNets.length > 0 ? exNets.some(n => n.depositEnable) : undefined;
+        const withdrawOpen = exNets.length > 0 ? exNets.some(n => n.withdrawEnable) : undefined;
 
         results.push({
           exchange:  exchangeId as ExchangeId,
@@ -188,6 +276,8 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
           bidVolume,
           askVolume,
           timestamp: (t.timestamp as number) ?? (book.timestamp as number) ?? Date.now(),
+          depositOpen,
+          withdrawOpen,
         });
         addedCount++;
       }
@@ -203,6 +293,15 @@ export async function fetchSpotTickers(): Promise<TickerData[]> {
   });
 
   await Promise.allSettled(tasks);
+
+  // 4. Fetch native DEXs (Vertex)
+  if (SPOT_EXCHANGES.includes('vertex')) {
+    console.log('[SpotService] Fetching Vertex native tickers...');
+    const vertexTickers = await fetchVertexTickers();
+    results.push(...vertexTickers);
+    exchangeStats['vertex'] = vertexTickers.length;
+    console.log(`[SpotService] vertex: ${vertexTickers.length} spot tickers (native)`);
+  }
 
   const totalExchanges = Object.keys(exchangeStats).length;
   const activeExchanges = Object.values(exchangeStats).filter(n => n > 0).length;

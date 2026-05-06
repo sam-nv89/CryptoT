@@ -27,6 +27,8 @@ import {
   WARM_SPREAD_THRESHOLD,
   DEPTH_ESTIMATE_FACTOR,
   MIN_EXECUTABLE_USD,
+  MAX_SPREADS_PER_SYMBOL,
+  NET_SPREAD_RAW_MIN,
 } from '@/config/spot-config';
 
 // Re-export for components that import from here
@@ -42,14 +44,17 @@ interface NormTicker extends TickerData {
   baseAsset: string;
 }
 
+// Map to collect spreads during evaluation
+const bySymbolSpreads = new Map<string, SpotSpreadEntry[]>();
+
 // === Main calculation entry point ===
 
 export function calculateSpotSpreads(
   tickers: TickerData[],
   currencies: Record<ExchangeId, Record<string, NetworkInfo[]>> | null
 ): SpotSpreadEntry[] {
-  const spreads: SpotSpreadEntry[] = [];
-
+  bySymbolSpreads.clear();
+  
   // 1. Group tickers by normalized symbol
   const bySymbol = new Map<string, NormTicker[]>();
 
@@ -73,21 +78,30 @@ export function calculateSpotSpreads(
 
   const currencyData = currencies ?? {} as Record<ExchangeId, Record<string, NetworkInfo[]>>;
 
-  // 2. For each symbol, evaluate all cross-exchange pairs
   for (const [normSymbol, symbolTickers] of bySymbol) {
     if (symbolTickers.length < 2) continue;
+    const spreadsForSymbol: SpotSpreadEntry[] = [];
 
     for (let i = 0; i < symbolTickers.length; i++) {
       for (let j = i + 1; j < symbolTickers.length; j++) {
         // Evaluate both directions
-        evaluateDirection(symbolTickers[i], symbolTickers[j], normSymbol, currencyData, spreads);
-        evaluateDirection(symbolTickers[j], symbolTickers[i], normSymbol, currencyData, spreads);
+        evaluateDirection(symbolTickers[i], symbolTickers[j], normSymbol, currencyData, spreadsForSymbol);
+        evaluateDirection(symbolTickers[j], symbolTickers[i], normSymbol, currencyData, spreadsForSymbol);
       }
     }
+    bySymbolSpreads.set(normSymbol, spreadsForSymbol);
   }
 
-  // 3. Sort by net spread descending
-  return spreads.sort((a, b) => b.netSpreadPercent - a.netSpreadPercent);
+  // 3. Limit spreads per symbol and sort
+  const result: SpotSpreadEntry[] = [];
+  for (const [_, symbolSpreads] of bySymbolSpreads) {
+    const topForSymbol = symbolSpreads
+      .sort((a, b) => b.netSpreadPercent - a.netSpreadPercent)
+      .slice(0, MAX_SPREADS_PER_SYMBOL);
+    result.push(...topForSymbol);
+  }
+
+  return result.sort((a, b) => b.netSpreadPercent - a.netSpreadPercent);
 }
 
 // === Direction evaluator with three-tier confidence ===
@@ -109,13 +123,7 @@ function evaluateDirection(
   if (spreadPct < MIN_SPOT_SPREAD_PCT) return;
 
   // Sanity: skip impossibly large spreads (usually different contract / stale data).
-  // Use a per-exchange relaxed cap for known high-noise markets (mexc, gate, bitmart, xt).
-  const highNoiseExchanges = new Set(['mexc', 'gate', 'bitmart', 'xt']);
-  const cap = (highNoiseExchanges.has(buyTick.exchange) || highNoiseExchanges.has(sellTick.exchange))
-    ? MAX_SPOT_SPREAD_PCT        // 8% — these can have genuine large dislocations
-    : MAX_SPOT_SPREAD_PCT * 0.7; // 5.6% for premium exchanges
-
-  if (spreadPct > cap) return;
+  if (spreadPct > MAX_SPOT_SPREAD_PCT) return;
 
   // === CRITICAL FIX: Depth Estimation ===
   // Most exchanges return bidVolume/askVolume = 0 in fetchTickers().
@@ -162,8 +170,12 @@ function evaluateDirection(
   const netSpreadPct   = spreadPct - totalCostPct;
   const profitPer1000  = (netSpreadPct / 100) * 1000;
 
-  // Filter: only show opportunities with positive net spread
-  if (netSpreadPct < 0) return;
+  // Filter: show all verified/estimated with profit, show RAW with soft limit
+  if (confidence === 'raw') {
+    if (netSpreadPct < NET_SPREAD_RAW_MIN) return;
+  } else {
+    if (netSpreadPct < 0) return;
+  }
 
   spreads.push({
     symbol:          normSymbol,
@@ -187,6 +199,8 @@ function evaluateDirection(
     tradingFeesUsd,
     netSpreadPercent: netSpreadPct,
     profitPer1000,
+    depositOpen:     sellTick.depositOpen,
+    withdrawOpen:    buyTick.withdrawOpen,
   });
 }
 
@@ -263,9 +277,32 @@ function resolveWithdrawFee(
 
 // === Network name fuzzy matching ===
 function networksMatch(a: string, b: string): boolean {
-  const na = a.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const nb = b.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return na === nb || na.includes(nb) || nb.includes(na);
+  const clean = (s: string) => s.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const na = clean(a);
+  const nb = clean(b);
+
+  if (na === nb) return true;
+
+  // Synonym map for common networks
+  const SYNONYMS: Record<string, string[]> = {
+    'BSC': ['BEP20', 'BNB', 'BNBSMARTCHAIN', 'BSC'],
+    'ERC20': ['ETH', 'ETHEREUM', 'ERC20'],
+    'TRC20': ['TRON', 'TRX', 'TRC20'],
+    'SOL': ['SOLANA', 'SOL'],
+    'MATIC': ['POLYGON', 'POL', 'MATIC'],
+    'AVAXC': ['AVALANCHE', 'AVAXC', 'AVAX'],
+    'ARB': ['ARBITRUM', 'ARBITRUMONE', 'ARB'],
+    'OP': ['OPTIMISM', 'OP'],
+    'NEAR': ['NEARPROTOCOL', 'NEAR'],
+    'DOT': ['POLKADOT', 'DOT'],
+    'ADA': ['CARDANO', 'ADA'],
+  };
+
+  for (const [root, list] of Object.entries(SYNONYMS)) {
+    if (list.includes(na) && list.includes(nb)) return true;
+  }
+
+  return na.includes(nb) || nb.includes(na);
 }
 
 // === Guess common network for a token ===

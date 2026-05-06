@@ -3,7 +3,7 @@
 export type ExchangeId =
   | 'binance' | 'bybit' | 'okx' | 'gate' | 'bitget'
   | 'kucoin' | 'mexc' | 'htx' | 'phemex' | 'bingx' | 'coinex'
-  | 'hyperliquid' | 'dydx' | 'apex' | 'poloniex' | 'xt' | 'bitmart' | 'ascendex';
+  | 'hyperliquid' | 'dydx' | 'apex' | 'poloniex' | 'xt' | 'bitmart' | 'ascendex' | 'lighter' | 'vertex';
 
 export type ExchangeType = 'cex' | 'dex';
 
@@ -26,6 +26,8 @@ export interface TickerData {
   bidVolume: number;
   askVolume: number;
   timestamp: number;
+  depositOpen?: boolean;
+  withdrawOpen?: boolean;
 }
 
 // === Spread Types ===
@@ -65,6 +67,8 @@ export interface SpotSpreadEntry extends SpreadEntry {
   tradingFeesUsd: number;
   netSpreadPercent: number; // Spread after all fees
   profitPer1000: number; // Net $ profit per $1000 capital deployed
+  depositOpen?: boolean;
+  withdrawOpen?: boolean;
 }
 
 export interface SpreadPair {
@@ -78,13 +82,17 @@ export interface SpreadPair {
 
 export type SpreadSortKey =
   | 'spreadPercent'
+  | 'netSpreadPercent'
   | 'spreadAbsolute'
+  | 'netProfit'
   | 'symbol'
   | 'volume24h'
   | 'buyExchange'
   | 'sellExchange'
   | 'buyPrice'
-  | 'sellPrice';
+  | 'sellPrice'
+  | 'maxQuantity'
+  | 'maxVolumeUsd';
 
 export type SortDirection = 'asc' | 'desc';
 

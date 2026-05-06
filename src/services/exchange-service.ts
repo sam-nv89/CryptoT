@@ -23,7 +23,7 @@ import { normalizeSymbol, normalizeTicker } from '@/utils/crypto';
 
 const exchangeInstances = new Map<string, Exchange>();
 
-function getExchangeInstance(ccxtId: string): Exchange {
+export function getExchangeInstance(ccxtId: string): Exchange {
   let instance = exchangeInstances.get(ccxtId);
   if (!instance) {
     const ExchangeClass = (ccxt as unknown as Record<string, new (opts?: object) => Exchange>)[ccxtId];

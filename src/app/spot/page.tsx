@@ -96,11 +96,11 @@ export default function SpotArbitragePage() {
           animationDelay={1}
         />
         <StatsCard
-          title="Data Quality"
-          value={`${stats.verifiedCount + stats.estimatedCount}`}
-          subtitle={`${stats.verifiedCount} verified, ${stats.estimatedCount} est.`}
-          icon={<Shield size={20} />}
-          accentColor="amber"
+          title="Transfer Ready"
+          value={stats.openTransferCount}
+          subtitle={`${stats.verifiedCount} fully verified routes`}
+          icon={<ArrowRightLeft size={20} />}
+          accentColor="primary"
           animationDelay={2}
         />
         <StatsCard
@@ -140,11 +140,12 @@ export default function SpotArbitragePage() {
 
       {/* Disclaimer */}
       <div className="glass-card p-4 text-xs text-text-muted">
-        <h4 className="font-semibold text-text-secondary mb-2 uppercase tracking-wider">Important Notice</h4>
+        <h4 className="font-semibold text-text-secondary mb-2 uppercase tracking-wider">Advanced Spot Intelligence</h4>
         <p>
-          This tool scans <strong className="text-text-secondary">14 exchanges</strong> (Binance, Bybit, OKX, KuCoin, Gate.io, MEXC, Bitget, HTX, CoinEx, Poloniex, XT.com, BitMart, BingX, Phemex) for spot price
-          differences. &quot;Verified&quot; spreads use real withdrawal fee data from exchange APIs. &quot;Estimated&quot; spreads
-          use statistical averages — always verify fees before executing trades. Prices update every 30 seconds.
+          Scanning <strong className="text-text-secondary">14 top-tier exchanges</strong> with real-time transfer status verification. 
+          <span className="text-accent-green font-bold mx-1">Verified</span> status means both deposit and withdrawal channels are confirmed open via API.
+          <span className="text-accent-amber font-bold mx-1">Estimated</span> uses fallback fee data.
+          <span className="text-text-muted font-bold mx-1">Raw</span> signals are experimental — always double-check the &quot;Blocked&quot; status before moving funds.
         </p>
       </div>
     </>

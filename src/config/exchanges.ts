@@ -49,6 +49,14 @@ export const EXCHANGES: Record<ExchangeId, ExchangeInfo> = {
     id: 'hyperliquid', name: 'Hyperliquid', type: 'dex',
     logo: '/exchanges/hyperliquid.svg', color: '#6EE7B7', enabled: true,
   },
+  lighter: {
+    id: 'lighter', name: 'Lighter', type: 'dex',
+    logo: '/exchanges/lighter.svg', color: '#B983FF', enabled: true,
+  },
+  vertex: {
+    id: 'vertex', name: 'Vertex', type: 'dex',
+    logo: '/exchanges/vertex.svg', color: '#10B981', enabled: true,
+  },
   dydx: {
     id: 'dydx', name: 'dYdX', type: 'dex',
     logo: '/exchanges/dydx.svg', color: '#6966FF', enabled: true,
@@ -94,6 +102,7 @@ export const CCXT_EXCHANGE_IDS: Partial<Record<ExchangeId, string>> = {
   xt: 'xt',
   bitmart: 'bitmart',
   ascendex: 'ascendex',
+  lighter: 'lighter',
 };
 
 /** Display-friendly symbol format (without settlement token) */

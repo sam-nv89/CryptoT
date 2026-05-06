@@ -71,14 +71,14 @@ export async function runSpotCollectionCycle(): Promise<SpotCollectionResult> {
 
     // 2. Fetch all spot tickers in parallel
     console.log(`[SpotCollector] Fetching spot tickers from ${SPOT_EXCHANGES.length} exchanges...`);
-    let spotTickers = await fetchSpotTickers();
+    let spotTickers = await fetchSpotTickers(cachedCurrencies || undefined);
     console.log(`[SpotCollector] Got ${spotTickers.length} spot tickers`);
 
     // Retry once if we got very few tickers (likely transient error)
     if (spotTickers.length < 50 && SPOT_EXCHANGES.length >= 5) {
       console.log('[SpotCollector] Low ticker count — retrying in 3s...');
       await new Promise(resolve => setTimeout(resolve, 3000));
-      spotTickers = await fetchSpotTickers();
+      spotTickers = await fetchSpotTickers(cachedCurrencies || undefined);
       console.log(`[SpotCollector] Retry result: ${spotTickers.length} spot tickers`);
     }
 

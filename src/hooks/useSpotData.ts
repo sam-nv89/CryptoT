@@ -21,6 +21,7 @@ interface SpotStats {
   uniqueSymbols: number;
   activeExchanges: number;
   avgSpreadPct: number;
+  openTransferCount: number;
 }
 
 interface UseSpotDataReturn {
@@ -69,6 +70,8 @@ function computeStats(spreads: SpotSpreadEntry[]): SpotStats {
     else if (s.spreadPercent >= WARM_SPREAD_THRESHOLD) warmCount++;
   }
 
+  const openTransferCount = spreads.filter(s => s.withdrawOpen !== false && s.depositOpen !== false).length;
+
   return {
     totalSpreads: spreads.length,
     verifiedCount,
@@ -81,6 +84,7 @@ function computeStats(spreads: SpotSpreadEntry[]): SpotStats {
     uniqueSymbols: symbols.size,
     activeExchanges: exchanges.size,
     avgSpreadPct: spreads.length > 0 ? sumSpread / spreads.length : 0,
+    openTransferCount,
   };
 }
 

@@ -6,7 +6,7 @@ import {
   ArrowRightLeft, ArrowUpDown, ArrowUp, ArrowDown,
   Search, X, ChevronLeft, ChevronRight, Filter,
   ChevronDown, Shield, AlertTriangle, HelpCircle,
-  Flame, Zap,
+  Flame, Zap, VolumeX, Settings, Eye, EyeOff,
 } from 'lucide-react';
 import type {
   SpotSpreadEntry, SpotConfidence, ExchangeId,
@@ -65,6 +65,8 @@ function compareSpreads(a: SpotSpreadEntry, b: SpotSpreadEntry, key: SpreadSortK
   let cmp = 0;
   switch (key) {
     case 'spreadPercent': cmp = a.spreadPercent - b.spreadPercent; break;
+    case 'netSpreadPercent': cmp = a.netSpreadPercent - b.netSpreadPercent; break;
+    case 'netProfit': cmp = a.netProfit - b.netProfit; break;
     case 'spreadAbsolute': cmp = a.profitPer1000 - b.profitPer1000; break;
     case 'volume24h': cmp = a.volume24h - b.volume24h; break;
     case 'buyPrice': cmp = a.buyPrice - b.buyPrice; break;
@@ -72,6 +74,8 @@ function compareSpreads(a: SpotSpreadEntry, b: SpotSpreadEntry, key: SpreadSortK
     case 'symbol': cmp = a.symbol.localeCompare(b.symbol); break;
     case 'buyExchange': cmp = a.buyExchange.localeCompare(b.buyExchange); break;
     case 'sellExchange': cmp = a.sellExchange.localeCompare(b.sellExchange); break;
+    case 'maxQuantity': cmp = a.maxQuantity - b.maxQuantity; break;
+    case 'maxVolumeUsd': cmp = (a.maxQuantity * a.buyPrice) - (b.maxQuantity * b.buyPrice); break;
   }
   return dir === 'desc' ? -cmp : cmp;
 }
@@ -240,9 +244,27 @@ function SkeletonRow() {
 // === Expanded Row Details ===
 function ExpandedDetails({ spread }: { spread: SpotSpreadEntry }) {
   const fmtUsd = (n: number) => `$${n < 0.01 ? n.toFixed(4) : n.toFixed(2)}`;
+  
+  const transferStatus = (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-2">
+        <span className="text-text-muted">Withdraw (Buy Ex):</span>
+        {spread.withdrawOpen === true ? <span className="text-accent-green flex items-center gap-1"><Shield size={10}/> Open</span> : 
+         spread.withdrawOpen === false ? <span className="text-accent-red flex items-center gap-1"><X size={10}/> Closed</span> :
+         <span className="text-text-muted italic">Unknown</span>}
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="text-text-muted">Deposit (Sell Ex):</span>
+        {spread.depositOpen === true ? <span className="text-accent-green flex items-center gap-1"><Shield size={10}/> Open</span> : 
+         spread.depositOpen === false ? <span className="text-accent-red flex items-center gap-1"><X size={10}/> Closed</span> :
+         <span className="text-text-muted italic">Unknown</span>}
+      </div>
+    </div>
+  );
+
   return (
     <tr className="bg-bg-elevated/30">
-      <td colSpan={9} className="px-6 py-4">
+      <td colSpan={12} className="px-6 py-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
           <div>
             <span className="text-text-muted block mb-1">Gross Spread</span>
@@ -273,8 +295,8 @@ function ExpandedDetails({ spread }: { spread: SpotSpreadEntry }) {
             <span className="mono-number text-text-primary">{spread.withdrawNetwork || 'Unknown'}</span>
           </div>
           <div>
-            <span className="text-text-muted block mb-1">24h Volume</span>
-            <span className="mono-number text-text-primary">${(spread.volume24h / 1000).toFixed(0)}K</span>
+            <span className="text-text-muted block mb-1">Transfer Status</span>
+            {transferStatus}
           </div>
           <div>
             <span className="text-text-muted block mb-1">Gross Profit</span>
@@ -286,6 +308,23 @@ function ExpandedDetails({ spread }: { spread: SpotSpreadEntry }) {
   );
 }
 
+// === Column Settings ===
+type ColumnId = 'pair' | 'exchanges' | 'spread' | 'netSpread' | 'netProfit' | 'profit1k' | 'maxQty' | 'maxVol' | 'volume' | 'transfers' | 'quality';
+
+const ALL_COLUMNS: { id: ColumnId; label: string; sortKey?: SpreadSortKey }[] = [
+  { id: 'pair', label: 'Pair', sortKey: 'symbol' },
+  { id: 'exchanges', label: 'Buy → Sell', sortKey: 'buyExchange' },
+  { id: 'spread', label: 'Spread %', sortKey: 'spreadPercent' },
+  { id: 'netSpread', label: 'Net %', sortKey: 'netSpreadPercent' },
+  { id: 'netProfit', label: 'Net USD', sortKey: 'netProfit' },
+  { id: 'maxQty', label: 'Max Qty', sortKey: 'maxQuantity' },
+  { id: 'maxVol', label: 'Max Vol', sortKey: 'maxVolumeUsd' },
+  { id: 'profit1k', label: 'Per $1K', sortKey: 'spreadAbsolute' },
+  { id: 'volume', label: 'Volume', sortKey: 'volume24h' },
+  { id: 'transfers', label: 'Transfers' },
+  { id: 'quality', label: 'Quality' },
+];
+
 // === Main Table ===
 export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
   const [sort, setSort] = useState<SpreadSortConfig>({ key: 'spreadPercent', direction: 'desc' });
@@ -293,6 +332,8 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
   const [page, setPage] = useState(0);
   const [expandedUid, setExpandedUid] = useState<string | null>(null);
   const [confidenceFilter, setConfidenceFilter] = useState<SpotConfidence | 'all'>('all');
+  const [visibleColumns, setVisibleColumns] = useState<Set<ColumnId>>(new Set(ALL_COLUMNS.map(c => c.id)));
+  const [showColumnSettings, setShowColumnSettings] = useState(false);
 
   const handleSort = useCallback((key: SpreadSortKey) => {
     setSort(prev => ({ key, direction: prev.key === key && prev.direction === 'desc' ? 'asc' : 'desc' }));
@@ -361,6 +402,48 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
         <div className="flex items-center gap-2">
           <ArrowRightLeft size={16} className="text-primary-400" />
           <h3 className="text-sm font-semibold text-text-primary">Spot Arbitrage Scanner</h3>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <button
+              onClick={() => setShowColumnSettings(!showColumnSettings)}
+              className="p-1.5 rounded-lg border border-border bg-bg-elevated text-text-muted hover:text-text-primary transition-all"
+              title="Column Settings"
+            >
+              <Settings size={14} />
+            </button>
+            {showColumnSettings && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowColumnSettings(false)} />
+                <div className="absolute top-full right-0 mt-1 z-50 bg-bg-surface border border-border rounded-xl shadow-xl p-2 min-w-[160px]">
+                  <div className="px-2 py-1 mb-1 text-[10px] font-bold text-text-muted uppercase tracking-wider border-b border-border/50">
+                    Visible Columns
+                  </div>
+                  {ALL_COLUMNS.map((col) => {
+                    const isVisible = visibleColumns.has(col.id);
+                    return (
+                      <button
+                        key={col.id}
+                        onClick={() => {
+                          const next = new Set(visibleColumns);
+                          if (isVisible) next.delete(col.id);
+                          else next.add(col.id);
+                          setVisibleColumns(next);
+                        }}
+                        className={clsx(
+                          'w-full flex items-center gap-2 px-2 py-1.5 rounded text-xs transition-colors',
+                          isVisible ? 'text-text-primary' : 'text-text-muted opacity-60 hover:opacity-100 hover:bg-bg-hover'
+                        )}
+                      >
+                        {isVisible ? <Eye size={12} className="text-primary-400" /> : <EyeOff size={12} />}
+                        <span>{col.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
           {loading && <div className="w-2 h-2 rounded-full bg-primary-400 animate-pulse" />}
         </div>
       </div>
@@ -385,14 +468,17 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
             <table className="w-full text-[13px]">
               <thead>
                 <tr className="border-b border-border/70">
-                  <SortableHeader label="Pair" sortKey="symbol" currentSort={sort} onSort={handleSort} />
-                  <SortableHeader label="Buy → Sell" sortKey="buyExchange" currentSort={sort} onSort={handleSort} />
-                  <SortableHeader label="Spread %" sortKey="spreadPercent" currentSort={sort} onSort={handleSort} align="right" />
-                  <SortableHeader label="Net %" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
-                  <SortableHeader label="Per $1K" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />
-                  <SortableHeader label="Volume" sortKey="volume24h" currentSort={sort} onSort={handleSort} align="right" />
-                  <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-text-muted">Network</th>
-                  <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted">Quality</th>
+                  {visibleColumns.has('pair') && <SortableHeader label="Pair" sortKey="symbol" currentSort={sort} onSort={handleSort} />}
+                  {visibleColumns.has('exchanges') && <SortableHeader label="Buy → Sell" sortKey="buyExchange" currentSort={sort} onSort={handleSort} />}
+                  {visibleColumns.has('spread') && <SortableHeader label="Spread %" sortKey="spreadPercent" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('netSpread') && <SortableHeader label="Net %" sortKey="netSpreadPercent" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('netProfit') && <SortableHeader label="Net USD" sortKey="netProfit" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('maxQty') && <SortableHeader label="Max Qty" sortKey="maxQuantity" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('maxVol') && <SortableHeader label="Max Vol" sortKey="maxVolumeUsd" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('profit1k') && <SortableHeader label="Per $1K" sortKey="spreadAbsolute" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('volume') && <SortableHeader label="Volume" sortKey="volume24h" currentSort={sort} onSort={handleSort} align="right" />}
+                  {visibleColumns.has('transfers') && <th className="px-3 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-text-muted">Transfers</th>}
+                  {visibleColumns.has('quality') && <th className="px-3 py-2.5 text-center text-[10px] font-semibold uppercase tracking-wider text-text-muted">Quality</th>}
                   <th className="px-3 py-2.5 w-8" />
                 </tr>
               </thead>
@@ -418,64 +504,123 @@ export function SpotTable({ spreads, loading, changedIds }: SpotTableProps) {
                           isExpanded && 'bg-bg-elevated/20',
                         )}
                       >
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-text-primary mono-number">{spread.symbol}</span>
-                            <TierBadge spreadPct={spread.spreadPercent} />
-                          </div>
-                          <span className="text-text-muted text-[10px]">/USDT</span>
-                        </td>
+                        {visibleColumns.has('pair') && (
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-text-primary mono-number">{spread.symbol}</span>
+                              <TierBadge spreadPct={spread.spreadPercent} />
+                              {(spread.withdrawOpen === false || spread.depositOpen === false) && (
+                                <span className="px-1 py-0.5 rounded bg-accent-red text-white text-[8px] font-bold">BLOCKED</span>
+                              )}
+                            </div>
+                            <span className="text-text-muted text-[10px]">/USDT</span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1">
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: buyEx?.color }} />
-                            <span className="text-[11px] text-text-secondary">{buyEx?.name}</span>
-                            <span className="text-text-muted mx-0.5">→</span>
-                            <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sellEx?.color }} />
-                            <span className="text-[11px] text-text-secondary">{sellEx?.name}</span>
-                          </div>
-                          <div className="flex gap-2 mt-0.5 text-[10px] text-text-muted mono-number">
-                            <span>${spread.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
-                            <span>→</span>
-                            <span>${spread.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
-                          </div>
-                        </td>
+                        {visibleColumns.has('exchanges') && (
+                          <td className="px-3 py-2.5">
+                            <div className="flex items-center gap-1">
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: buyEx?.color }} />
+                              <span className="text-[11px] text-text-secondary">{buyEx?.name}</span>
+                              <span className="text-text-muted mx-0.5">→</span>
+                              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sellEx?.color }} />
+                              <span className="text-[11px] text-text-secondary">{sellEx?.name}</span>
+                            </div>
+                            <div className="flex gap-2 mt-0.5 text-[10px] text-text-muted mono-number">
+                              <span>${spread.buyPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
+                              <span>→</span>
+                              <span>${spread.sellPrice.toLocaleString('en-US', { maximumFractionDigits: 6 })}</span>
+                            </div>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-right">
-                          <span className={clsx('mono-number font-bold text-sm', isHot ? 'text-accent-red' : isWarm ? 'text-accent-amber' : 'text-accent-green')}>
-                            {spread.spreadPercent.toFixed(3)}%
-                          </span>
-                        </td>
+                        {visibleColumns.has('spread') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={clsx('mono-number font-bold text-sm', isHot ? 'text-accent-red' : isWarm ? 'text-accent-amber' : 'text-accent-green')}>
+                              {spread.spreadPercent.toFixed(3)}%
+                            </span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-right">
-                          <span className={clsx('mono-number font-semibold text-xs', spread.netSpreadPercent > 0 ? 'text-accent-green' : 'text-accent-red')}>
-                            {spread.netSpreadPercent > 0 ? '+' : ''}{spread.netSpreadPercent.toFixed(3)}%
-                          </span>
-                        </td>
+                        {visibleColumns.has('netSpread') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={clsx('mono-number font-semibold text-xs', spread.netSpreadPercent > 0 ? 'text-accent-green' : 'text-accent-red')}>
+                              {spread.netSpreadPercent > 0 ? '+' : ''}{spread.netSpreadPercent.toFixed(3)}%
+                            </span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-right">
-                          <span className={clsx('mono-number font-bold', spread.profitPer1000 > 0 ? 'text-accent-green' : 'text-text-muted')}>
-                            {spread.profitPer1000 > 0 ? '+' : ''}${spread.profitPer1000.toFixed(2)}
-                          </span>
-                        </td>
+                        {visibleColumns.has('netProfit') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={clsx('mono-number font-bold text-xs', spread.netProfit > 0 ? 'text-accent-green' : 'text-accent-red')}>
+                              {spread.netProfit > 0 ? '+' : ''}${spread.netProfit.toFixed(2)}
+                            </span>
+                          </td>
+                        )}
+                        
+                        {visibleColumns.has('maxQty') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="mono-number text-xs text-text-primary">
+                              {spread.maxQuantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-right">
-                          <span className="mono-number text-xs text-text-muted">
-                            {spread.volume24h >= 1_000_000
-                              ? `$${(spread.volume24h / 1_000_000).toFixed(1)}M`
-                              : `$${(spread.volume24h / 1_000).toFixed(0)}K`}
-                          </span>
-                        </td>
+                        {visibleColumns.has('maxVol') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="mono-number text-xs text-text-primary">
+                              ${(spread.maxQuantity * spread.buyPrice).toLocaleString('en-US', { maximumFractionDigits: 2 })}
+                            </span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-right">
-                          <span className="mono-number text-xs text-text-secondary bg-bg-elevated px-1.5 py-0.5 rounded border border-border/50">
-                            {spread.withdrawNetwork || '—'}
-                          </span>
-                        </td>
+                        {visibleColumns.has('profit1k') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className={clsx('mono-number font-bold', spread.profitPer1000 > 0 ? 'text-accent-green' : 'text-text-muted')}>
+                              {spread.profitPer1000 > 0 ? '+' : ''}${spread.profitPer1000.toFixed(2)}
+                            </span>
+                          </td>
+                        )}
 
-                        <td className="px-3 py-2.5 text-center">
-                          <ConfidenceBadge confidence={spread.confidence} />
-                        </td>
+                        {visibleColumns.has('volume') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <span className="mono-number text-xs text-text-muted">
+                              {spread.volume24h >= 1_000_000
+                                ? `$${(spread.volume24h / 1_000_000).toFixed(1)}M`
+                                : `$${(spread.volume24h / 1_000).toFixed(0)}K`}
+                            </span>
+                          </td>
+                        )}
+
+                        {visibleColumns.has('transfers') && (
+                          <td className="px-3 py-2.5 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <span className={clsx(
+                                'text-[10px] font-bold px-1.5 py-0.5 rounded border',
+                                spread.withdrawOpen === false || spread.depositOpen === false 
+                                  ? 'bg-accent-red/10 text-accent-red border-accent-red/20'
+                                  : 'bg-bg-elevated text-text-secondary border-border/50'
+                              )}>
+                                {spread.withdrawNetwork || '—'}
+                              </span>
+                              <div className="flex items-center gap-0.5">
+                                <span title="Withdraw" className={spread.withdrawOpen === false ? 'text-accent-red' : spread.withdrawOpen === true ? 'text-accent-green' : 'text-text-muted'}>
+                                  {spread.withdrawOpen === false ? <VolumeX size={12} /> : <ArrowUp size={12} />}
+                                </span>
+                                <span className="text-text-muted mx-px">/</span>
+                                <span title="Deposit" className={spread.depositOpen === false ? 'text-accent-red' : spread.depositOpen === true ? 'text-accent-green' : 'text-text-muted'}>
+                                  {spread.depositOpen === false ? <VolumeX size={12} /> : <ArrowDown size={12} />}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+                        )}
+
+                        {visibleColumns.has('quality') && (
+                          <td className="px-3 py-2.5 text-center">
+                            <ConfidenceBadge confidence={spread.confidence} />
+                          </td>
+                        )}
 
                         <td className="px-3 py-2.5">
                           <ChevronDown size={14} className={clsx('text-text-muted transition-transform', isExpanded && 'rotate-180')} />

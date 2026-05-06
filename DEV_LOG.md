@@ -1,5 +1,105 @@
 # DEV_LOG — CryptoTracker
 
+## [2026-05-06] Whale Tracker: Data Accuracy & UI Polish
+- [x] **UI Dropdown Upgrade**: Replaced native `<select>` with a premium custom dropdown in `WhaleSearchBar`. Added glassmorphism, animations, and better UX.
+- [x] **Data Accuracy Fix**: 
+  - Corrected transaction mapping: Fixed bug where incoming transfers showed 'ETH' instead of the actual token (e.g., USDC).
+  - Implemented smarter price estimation: $1 for stables, ~$3200 for ETH/WETH, improving USD value realism.
+- [x] **ID System Robustness**: Updated `WhaleProfile` IDs to include full address and network. Fixed "Profile not found" error for custom-tracked wallets.
+- [x] **Spam Filtering**: Integrated `possible_spam` and symbol-length filters to exclude junk tokens from analytics.
+- [x] **Build Verification**: Project passed `npm run build` with all new analytics and UI logic.
+
+## [2026-05-06] Whale Tracker: Analytics Expansion & Search
+- [x] **Registry Expansion**: Added high-profile addresses for Wintermute, Jump Trading, Andrew Kang, and institutional entities to the default tracking list.
+- [x] **UI Table Upgrade**: 
+  - Added "Balance" and "Avg Profit" columns to `WhaleTable` for immediate performance assessment.
+  - Implemented dynamic sorting by Balance, PnL, and WinRate.
+- [x] **Track New Wallet**:
+  - Implemented `WhaleSearchBar` component allowing users to input any wallet address (ETH, BSC, ARB, SOL, etc.).
+  - Enabled dynamic profile generation for untracked addresses via query-params in `/api/whales/[id]`.
+- [x] **Global Statistics**:
+  - Created `/api/whales/stats` to aggregate data across all tracked whales.
+  - Updated `WhaleStatsOverview` to display real-time average WinRate, R/R, and Network distribution.
+- [x] **Data Hygiene**: Improved spam filtering for net-worth and PnL queries to ensure realistic metrics.
+
+- [x] **Network Expansion**: Added `SOL` network support in `WhaleNetwork` type and dynamically routed API calls based on network architecture.
+- [x] **Hybrid Adapter**: Implemented `fetchMoralisSolana` to query `solana-gateway.moralis.io` specifically for Solana wallets (since they don't use EVM endpoints).
+- [x] **Live Data & Simulation**: 
+  - Successfully fetching real native SOL balances via `/account/mainnet/{address}/portfolio`.
+  - Simulating historical token transfers, PnL, and WinRate for Solana wallets because Moralis v2 does not expose these endpoints for non-EVM chains natively yet.
+- [x] **New Tracking Addresses**: Added real Solana wallets (e.g., Binance SOL Hot Wallet and top holders) to `ACTIVE_WHALES`.
+- **Verification**: Verified zero type errors during build. Next.js server correctly hydrates dashboard with mixed EVM/SOL data.
+## [2026-05-06] Whale Tracker: Real On-Chain Integration (Moralis API)
+- [x] **API Migration**: Rewrote `whale-service.ts` to replace mock faker data with live on-chain data using the Moralis API.
+- [x] **Endpoints Used**:
+  - `/wallets/{address}/net-worth` for realtime USD balances.
+  - `/wallets/{address}/profitability` for accurate PnL and trade counts.
+  - `/{address}/erc20/transfers` for live token swap history.
+- [x] **Configuration**: Added `.env.local` securely storing `MORALIS_API_KEY`.
+- [x] **Caching**: Implemented an in-memory TTL cache (5 mins) in `whale-service.ts` to prevent hitting rate limits on dashboard reloads.
+- [x] **Async API Routes**: Updated Next.js `/api/whales/*` routes to fully support asynchronous `await` calls to the service layer.
+- **Verification**: Zero type errors during build. No external dependencies (like `axios` or Moralis SDK) were needed, keeping the bundle clean via native `fetch`.
+
+## [2026-05-06] Whale Tracker Module Implementation
+- [x] **Data Architecture**: Designed and implemented `WhaleProfile`, `WhaleAnalytics`, and `WhaleTransaction` interfaces.
+- [x] **Mock Service**: Created an advanced simulated data generator (`whale-service.ts`) yielding 50+ realistic whale profiles with varying trading strategies, complete historical analytics (Win Rate, PnL, Risk/Reward), and dynamic transaction feeds.
+- [x] **API Endpoints**: Built Next.js REST routes (`/api/whales`, `/api/whales/[id]`, `/api/whales/[id]/transactions`) for client-side data consumption.
+- [x] **Premium UI Components**:
+  - `WhaleStatsOverview`: High-level metrics for the entire tracked network.
+  - `WhaleTable`: Interactive data grid with sorting, visual PnL indicators, and Win Rate bars.
+  - `WhaleAnalyticsGrid`: Rich dashboard showing deep performance metrics per wallet.
+  - `WhaleTransactionHistory`: Detailed feed of token swaps, buys, and sells.
+- [x] **Pages**: Replaced the `/whales` placeholder with the full dashboard and created a new dynamic route `/whales/[id]` for deep-dive wallet analysis.
+- **Verification**: `npm run build` succeeds completely; ready for real on-chain API swapping in the future.
+
+## [2026-05-06] High-Liquidity DEX Integration: Vertex Protocol
+- [x] **Vertex Protocol Support**: Implemented native Market Data API integration for Vertex.
+- [x] **Symbol Normalization**: Added logic to map Vertex spot symbols (e.g., `BTC-USDC_SPOT`) to standard `BTC/USDC`.
+- **Feature**: Интегрирован **Vertex Protocol** (Arbitrum) — один из самых ликвидных DEX на данный момент.
+- **Implementation**: Реализован нативный сборщик данных через REST API Vertex, так как в текущей версии CCXT его поддержка отсутствует.
+- **Config**: Настроены комиссии (0.02%) и добавлена поддержка в общем цикле сбора данных.
+
+## [2026-05-06] New DEX Integration: Lighter (Arbitrum)
+- [x] **Lighter DEX Support**: Integrated Lighter into the spot arbitrage engine.
+- [x] **Custom Price Discovery**: Implemented parallel `fetchOrderBook` calls for Lighter because its standard tickers lack bid/ask data.
+- **Feature**: Добавлен новый топовый DEX — **Lighter** (Arbitrum).
+- **Optimization**: Реализован специальный сборщик стаканов для Lighter, так как стандартные тикеры CCXT не содержат цен покупки/продажи.
+- **Config**: Обновлены комиссии (0.02%) и метаданные биржи.
+
+## [2026-05-06] Spot Table Enhancement: Volume and Quantity
+- [x] **Max Vol (USDT) Column**: Shows total dollar volume available for the spread.
+- [x] **Max Qty Column**: Shows the exact number of coins available.
+- **Feature**: Добавлены столбцы "Max Vol" и "Max Qty" для отображения ликвидности сделки.
+- **Sorting**: Реализована сортировка по объему и количеству монет.
+- **Customization**: Новые столбцы доступны в меню настроек видимости.
+
+## [2026-05-06] Spot Table Customization & Net Spread Integration
+- [x] **Column Toggle UI** (Customizable table visibility)
+- [x] **Net Spread % & Net USD Columns** (Nominal and percentage profitability)
+- **Feature**: Реализована возможность настройки видимости столбцов (Column Toggles). Добавлена иконка шестеренки с выпадающим списком.
+- **Feature**: Интегрирован столбец "Net USD" (Чистый профит в номинале) для оценки абсолютной прибыли в долларах.
+- **Improvement**: Добавлена поддержка сортировки по `netProfit`.
+- **UI**: Переработана структура таблицы для поддержки динамического отображения колонок.
+- **UI**: Улучшена читаемость "Transfers" и добавлена индикация "BLOCKED" в основную строку.
+
+## [2026-05-06] Spot Arbitrage Engine Overhaul & Data Coverage Boost
+- **Feature**: Релизована поддержка статусов депозитов и выводов (Transfer Status) через API.
+- **Improvement**: Исправлена критическая ошибка расчета `quoteVolume`, из-за которой отсекалось до 60% пар.
+- **Improvement**: Снижен порог `MIN_EXECUTABLE_USD` до $10 для расширения охвата мелких активов.
+- **Improvement**: Расширена таблица синонимов сетей (BSC=BEP20, ETH=ERC20 и т.д.) для повышения точности "Verified" спредов.
+- **Improvement**: Увеличен лимит `MAX_SPOT_SPREAD_PCT` до 20% для захвата реальных дислокаций на волатильных рынках.
+- **UI**: Добавлена колонка "Transfers" с индикацией ✅/⛔ и бейджи "BLOCKED" для неисполнимых пар.
+- **UI**: Добавлена новая метрика "Transfer Ready" в статистику страницы.
+- **Logic**: Внедрено ограничение `MAX_SPREADS_PER_SYMBOL = 5` для предотвращения доминирования одного актива в таблице.
+- **Logic**: Разрешены "Raw" сигналы с мягким порогом (-0.15%), чтобы не пропускать потенциальные связки.
+
+## 2026-05-06 — Project Update & Server Launch
+- **GitHub Sync**: Pulled latest updates from the repository.
+- **Dependencies**: Verified and updated via `npm install`.
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Status**: System is up to date and running in development mode (Turbopack).
+
+
 ## 2026-05-05 — Spot Arbitrage: Maximum Coverage Upgrade
 
 ### Problem
@@ -102,8 +202,10 @@ Implemented a progressive confidence system that always produces results:
 - **Git Sync**: Успешно загружены обновления из репозитория GitHub.
 - **Hotfixes**: Исправлены регрессии TypeScript, возникшие после обновления:
   - Исправлены типы в `MOCK_EXAMPLE` на странице `/reports` (`nextFundingTime` и `timeframe`).
-  - Добавлен недостающий импорт `TickerData` в `collector.ts`.
-  - Исправлено несоответствие имен свойств (`baseAsset` vs `asset`) в `spot-calculator.ts`.
+  - Добавлен- [x] Расширение охвата: фикс quoteVolume и volume фильтров
+- [x] Сопоставление контрактов и сетей (Synonyms)
+- [x] Статусы вводов/выводов (deposit/withdraw status)
+- [ ] WebSocket Integration для топ-бирж
 - **Verification**: Проведена полная проверка сборки (`npm run build`) — ошибок не обнаружено.
 - **Status**: Репозиторий синхронизирован и работоспособен.
 
