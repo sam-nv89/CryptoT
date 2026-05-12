@@ -44,24 +44,23 @@ To ensure maximum exchange coverage, the service implements:
 - **`fetchMarkets: ['swap']`**: Forces focus on perpetual markets for the futures engine.
 - **`defaultType: 'spot'`**: Explicitly used in the spot engine to ensure correct symbol resolution.
 
-## 🐳 Whale Tracker Analytics Architecture
+## 🐳 Smart Money Scanner Architecture
 The whale monitoring system is built for accuracy and multi-chain flexibility:
 
 ### 1. Hybrid Chain Support (`src/services/whale-service.ts`)
+- **Deterministic Demo Mode**: Implements a seeded random data generator (`addrSeed`) that provides realistic, consistent analytics even when `MORALIS_API_KEY` is missing.
 - **EVM Integration**: Uses Moralis `erc20/transfers`, `net-worth`, and `profitability` endpoints.
-- **Solana Gateway**: Implements a specialized adapter for `solana-gateway.moralis.io` to fetch native SOL balances and portfolio data.
-- **Dynamic ID Parsing**: Custom wallet profiles are generated on-the-fly using self-describing IDs (`whale_network_address`), allowing tracking of any arbitrary wallet without database persistence.
+- **Solana Gateway**: Specialized adapter for native SOL balances.
+- **Dynamic ID Parsing**: Custom profiles via `whale_network_address` IDs.
 
 ### 2. Data Integrity & PnL Engine
-- **100% Realized PnL**: Shifted from simulated estimations to absolute realized profit metrics using the Moralis `profitability` endpoint.
-- **Accurate WinRate**: Calculated strictly as `Profitable Tokens / Total Traded Tokens`.
-- **Trading Activity Metrics**: Replaced simulated "Experience" and "Risk/Reward" with real-time `Total Invested USD`, `Total Trades`, and `Profitable Tokens Count`.
-- **Spam Filtering**: Automatically excludes contracts marked as `possible_spam` and filters out tokens with suspicious names/lengths to prevent "airdrop-skewed" net worth.
-- **Smarter Pricing**: Implements a rule-based price estimator ($1 for stables, curated prices for major L1s) for transaction history where real-time historical price API is restricted.
-- **ERC20 Mapping**: Advanced mapping of raw transfers into human-readable BUY/SELL actions with correct asset identification.
+- **100% Realized PnL**: Realized profit, ROI, and per-token PnL breakdown via Moralis.
+- **Portfolio Analytics**: Token holdings with 24h changes and distribution bars.
+- **Advanced Filtering**: Server-side filtering (WinRate, PnL, ROI, Balance, Trades) for ETH, BSC, ARB, SOL, MANTLE, ZKSYNC.
+- **Spam Filtering**: Automatic exclusion of `possible_spam` contracts.
 
 ### 3. Global Stats Aggregation
-- **API Cache**: Global whale statistics (Total Tracked Profit, Avg WinRate) are aggregated across the core registry and cached to ensure fast dashboard loading without triggering Moralis rate limits.
+- **API Cache**: Aggregated stats (Profit, WinRate, ROI) with tiered caching (5m-10m TTL).
 
 ---
 

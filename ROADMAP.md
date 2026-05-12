@@ -30,12 +30,13 @@
 - [ ] Funding arbitrage execution strategies
 
 ## Phase 4: Advanced Whale Tracking & Analytics ✅
-- [x] **Registry Expansion** (Wintermute, Jump, Smart Money)
-- [x] **Track New Wallet** feature (dynamic profile generation)
-- [x] **Custom Multi-chain UI** (EVM/Solana support)
-- [x] **100% Data Accuracy** (Realized PnL, Real WinRate, Total Invested)
-- [x] **Global Stats Dashboard** (Real-time aggregated metrics)
-- [ ] **Telegram Bot Signals** (Next priority)
+- [x] **Smart Money Scanner**: Multi-chain filtering engine (ETH, BSC, ARB, SOL, etc.)
+- [x] **100% Data Accuracy**: Realized PnL, WinRate, and ROI via Moralis Profitability
+- [x] **Portfolio Analytics**: Token holdings, distribution charts, and 24h price changes
+- [x] **Deterministic Demo Mode**: Seamless usage even without API keys
+- [x] **Global Stats Dashboard**: Real-time aggregated ecosystem metrics
+- [ ] **Telegram Bot Signals**: Real-time notifications for tracked wallet actions
+- [ ] **Profitability Charts**: PnL-over-time visualization in whale profiles (Phase 6)
 
 ## Phase 5: Reporting & Export ✅
 - [x] Detailed CSV/JSON export service

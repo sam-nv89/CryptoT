@@ -1,104 +1,90 @@
 import React from 'react';
 import { WhaleAnalytics } from '@/types/whales';
-import { Target, TrendingUp, Clock, Scale } from 'lucide-react';
+import { Target, TrendingUp, BarChart3, Percent } from 'lucide-react';
 
 interface Props {
   analytics: WhaleAnalytics;
 }
 
 export const WhaleAnalyticsGrid: React.FC<Props> = ({ analytics }) => {
+  const roiColor = analytics.roi >= 0 ? 'text-success-400' : 'text-danger-400';
+  const pnlColor = analytics.totalPnL >= 0 ? 'text-success-400' : 'text-danger-400';
+
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
-      
-      {/* Win Rate Card */}
-      <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Win Rate</h3>
-          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
-            <Target size={16} />
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 mb-8">
+      {/* Win Rate */}
+      <div className="glass-card p-5 group">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">Win Rate</h3>
+          <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
+            <Target size={14} />
           </div>
         </div>
-        
-        <div className="flex items-end gap-3 mb-4">
-          <span className="text-4xl font-bold text-text-primary">{analytics.winRate.toFixed(1)}%</span>
-        </div>
-        
+        <div className="text-3xl font-bold text-text-primary mb-3">{analytics.winRate.toFixed(1)}%</div>
         <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-          <div 
-            className={`h-full rounded-full transition-all duration-1000 ${analytics.winRate >= 60 ? 'bg-success-500' : analytics.winRate >= 45 ? 'bg-warning-500' : 'bg-danger-500'}`}
+          <div
+            className={`h-full rounded-full transition-all duration-700 ${
+              analytics.winRate >= 60 ? 'bg-success-500' : analytics.winRate >= 45 ? 'bg-warning-500' : 'bg-danger-500'
+            }`}
             style={{ width: `${analytics.winRate}%` }}
           />
         </div>
+        <div className="flex justify-between mt-2 text-[10px] text-text-muted">
+          <span>Win: <span className="text-success-400 font-medium">{analytics.profitableTokens}</span></span>
+          <span>Loss: <span className="text-danger-400 font-medium">{analytics.totalTradedTokens - analytics.profitableTokens}</span></span>
+        </div>
       </div>
 
-      {/* Total Invested Card */}
-      <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Total Invested</h3>
-          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
-            <Scale size={16} />
+      {/* Total PnL */}
+      <div className="glass-card p-5 group">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">Realized PnL</h3>
+          <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
+            <TrendingUp size={14} />
           </div>
         </div>
-        
-        <div className="flex items-end gap-2 mb-2">
-          <span className="text-3xl font-bold font-mono tracking-tight text-text-primary">
-            ${analytics.totalUsdInvested > 1000000 
-                ? (analytics.totalUsdInvested / 1000000).toFixed(2) + 'M' 
-                : analytics.totalUsdInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </span>
+        <div className={`text-2xl font-bold font-mono tracking-tight ${pnlColor}`}>
+          {analytics.totalPnL >= 0 ? '+' : ''}
+          ${Math.abs(analytics.totalPnL) > 1_000_000
+            ? (Math.abs(analytics.totalPnL) / 1_000_000).toFixed(2) + 'M'
+            : Math.abs(analytics.totalPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </div>
-        
-        <p className="text-sm text-text-muted">
-          Lifetime volume invested in tokens
+        <p className="text-xs text-text-muted mt-2">
+          Invested: ${analytics.totalUsdInvested > 1_000_000
+            ? (analytics.totalUsdInvested / 1_000_000).toFixed(1) + 'M'
+            : analytics.totalUsdInvested.toLocaleString(undefined, { maximumFractionDigits: 0 })}
         </p>
       </div>
 
-      {/* Recent PnL Card */}
-      <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Estimated 30D PnL</h3>
-          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
-            <TrendingUp size={16} />
+      {/* ROI */}
+      <div className="glass-card p-5 group">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">ROI</h3>
+          <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
+            <Percent size={14} />
           </div>
         </div>
-        
-        <div className="flex items-end gap-3 mb-2">
-          <span className={`text-3xl font-bold font-mono tracking-tight ${analytics.recent30dPnL >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-            {analytics.recent30dPnL >= 0 ? '+' : ''}
-            ${Math.abs(analytics.recent30dPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </span>
+        <div className={`text-3xl font-bold font-mono ${roiColor}`}>
+          {analytics.roi >= 0 ? '+' : ''}{analytics.roi.toFixed(1)}%
         </div>
-        
-        <div className="flex items-center gap-2 text-sm text-text-muted mt-2">
-          <span>7D:</span>
-          <span className={`font-mono ${analytics.recent7dPnL >= 0 ? 'text-success-400' : 'text-danger-400'}`}>
-            {analytics.recent7dPnL >= 0 ? '+' : ''}
-            ${Math.abs(analytics.recent7dPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-          </span>
-        </div>
+        <p className="text-xs text-text-muted mt-2">Return on Investment</p>
       </div>
 
-      {/* Trading Activity Card */}
-      <div className="glass-card p-6 relative overflow-hidden flex flex-col justify-between group">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-medium text-text-muted uppercase tracking-wider">Trading Activity</h3>
-          <div className="w-8 h-8 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
-            <Clock size={16} />
+      {/* Trading Activity */}
+      <div className="glass-card p-5 group">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-xs font-medium text-text-muted uppercase tracking-wider">Trading Activity</h3>
+          <div className="w-7 h-7 rounded-full bg-white/5 flex items-center justify-center text-text-muted group-hover:text-primary-400 group-hover:bg-primary-500/10 transition-colors">
+            <BarChart3 size={14} />
           </div>
         </div>
-        
-        <div className="flex items-end gap-2 mb-2">
-          <span className="text-4xl font-bold text-text-primary">
-            {analytics.totalTrades}
-          </span>
-          <span className="text-text-muted mb-1 pb-1">Trades</span>
+        <div className="text-3xl font-bold text-text-primary">{analytics.totalTrades}</div>
+        <div className="flex items-center gap-3 mt-2 text-xs text-text-muted">
+          <span>{analytics.totalTradedTokens} tokens</span>
+          <span>·</span>
+          <span>Avg ${Math.abs(analytics.avgProfitPerToken).toLocaleString(undefined, { maximumFractionDigits: 0 })}/token</span>
         </div>
-        
-        <p className="text-sm text-text-muted">
-          Profitable Tokens: <span className="text-success-400 font-medium">{analytics.profitableTokens}</span> / {analytics.totalTradedTokens}
-        </p>
       </div>
-
     </div>
   );
 };

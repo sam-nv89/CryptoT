@@ -1,9 +1,12 @@
+'use client';
+
 import React, { useState, useEffect } from 'react';
-import { Activity, TrendingUp, ShieldAlert, BarChart3 } from 'lucide-react';
+import { Activity, TrendingUp, BarChart3, Percent } from 'lucide-react';
 import { StatsCard } from '@/components/ui/StatsCard';
+import { WhaleGlobalStats } from '@/types/whales';
 
 export const WhaleStatsOverview: React.FC = () => {
-  const [stats, setStats] = useState<any>(null);
+  const [stats, setStats] = useState<WhaleGlobalStats | null>(null);
 
   useEffect(() => {
     fetch('/api/whales/stats')
@@ -13,9 +16,9 @@ export const WhaleStatsOverview: React.FC = () => {
   }, []);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8 animate-fade-in">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-5 mb-6 animate-fade-in">
       <StatsCard
-        title="Active Whales"
+        title="Tracked Wallets"
         value={stats?.totalTracked?.toString() || '...'}
         icon={<Activity />}
         accentColor="primary"
@@ -25,20 +28,20 @@ export const WhaleStatsOverview: React.FC = () => {
         value={stats ? `${stats.avgWinRate.toFixed(1)}%` : '...'}
         icon={<TrendingUp />}
         accentColor="green"
-        subtitle="+1.2% vs avg"
       />
       <StatsCard
-        title="Total Tracked Profit"
-        value={stats ? `$${(stats.totalProfit > 1000000 ? (stats.totalProfit / 1000000).toFixed(1) + 'M' : stats.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 }))}` : '...'}
+        title="Total Realized PnL"
+        value={stats ? `$${stats.totalProfit > 1_000_000 ? (stats.totalProfit / 1_000_000).toFixed(1) + 'M' : stats.totalProfit.toLocaleString(undefined, { maximumFractionDigits: 0 })}` : '...'}
         icon={<BarChart3 />}
         accentColor="amber"
-        subtitle="Realized PnL"
+        subtitle="Across all tracked wallets"
       />
       <StatsCard
-        title="Top Network"
-        value={stats?.topNetwork || '...'}
-        icon={<ShieldAlert />}
+        title="Avg ROI"
+        value={stats ? `${stats.avgROI >= 0 ? '+' : ''}${stats.avgROI.toFixed(1)}%` : '...'}
+        icon={<Percent />}
         accentColor="red"
+        subtitle="Return on Investment"
       />
     </div>
   );

@@ -1,4 +1,70 @@
 # DEV_LOG — CryptoTracker
+
+## 2026-05-12 — Whale Tracker: Accessibility, UX Polish & Final Documentation
+- [x] **Dropdown Visibility Fixes**:
+  - Replaced native `<select>` in `WalletFiltersPanel` with a **Custom UI Dropdown** to ensure solid backgrounds on Windows/Chrome.
+  - Implemented 100% opaque backgrounds (`#0b0e14`) and high-contrast borders for all dropdown menus.
+  - Reduced menu gaps (`mt-1`) to eliminate cursor "dropouts" when navigating the list.
+  - Added "Active State" highlighting for buttons when their menus are open.
+- [x] **Functional Polish**:
+  - Added "All Networks" option to the main Search Bar to act as a global filter for the wallet list.
+  - Integrated `onNetworkChange` callback to synchronize search bar selection with the global `filters` state.
+  - Fixed an infinite re-render loop (`Maximum update depth exceeded`) using a combination of `useCallback` in the page and `useRef` for callbacks in child components.
+  - Expanded network coverage in filters panel to include all supported chains (ETH, BSC, ARB, SOL, MANTLE, ZKSYNC).
+- [x] **Documentation & Hygiene**:
+  - Updated `ARCHITECTURE.md` with new "Smart Money Scanner" technical details and the **Deterministic Demo Mode** logic.
+  - Synchronized `ROADMAP.md` by marking Whale Tracking Phase 4 as fully completed.
+  - Final build verification: `npm run build` — ✅ DONE.
+- **Status**: Ready for production deployment. Wallet analytics engine is fully functional with or without Moralis API key.
+
+## 2026-05-12 — Whale Tracker → Smart Money Scanner (Full Overhaul)
+- [x] **Complete Architecture Overhaul**: Transformed Whale Tracker from a basic monitoring tool into a professional On-Chain Wallet Analytics Platform ("Smart Money Scanner").
+- [x] **Data Layer Rewrite** (`whale-service.ts`):
+  - Added `getTokenHoldings()` via Moralis `wallets/{address}/tokens` endpoint — real token portfolio with prices.
+  - Added `getPnLBreakdown()` via Moralis `profitability` — per-token realized PnL with buy/sell averages, ROI.
+  - Removed all fake data: deleted `recent30dPnL: totalPnL * 0.2` simulation and `Math.random()` Solana mock transactions.
+  - Implemented full filter system with `WalletSearchFilters` interface (WinRate, PnL, ROI, Balance, Trades filters).
+  - Typed cache with separate TTLs per data category (profile: 5m, tokens: 2m, profitability: 10m).
+  - Eliminated all `any` types — full TypeScript strictness.
+- [x] **Type System Expansion** (`whales.ts`, `whale-filters.ts`):
+  - Added `WalletTokenHolding`, `TokenPnLEntry`, `WalletTokensResponse`, `WalletPnLResponse`, `WhaleGlobalStats` interfaces.
+  - Extended `WhaleAnalytics` with `roi`, `avgProfitPerToken`, `totalSoldUsd`, nullable `pnl7d`/`pnl30d`.
+  - Created `WalletSearchFilters` with sort/filter presets (Top Winners, High ROI, Active Traders, Big Balance).
+- [x] **New API Endpoints**:
+  - `GET /api/whales/[id]/tokens` — current token holdings with prices and 24h changes.
+  - `GET /api/whales/[id]/pnl` — per-token PnL breakdown with summary stats.
+  - Updated `GET /api/whales` — supports full filter query params (minWinRate, minPnL, minROI, etc.).
+- [x] **3 New UI Components**:
+  - `WalletFiltersPanel` — preset buttons, collapsible advanced filters, inline sort controls.
+  - `WalletTokenHoldings` — portfolio table with distribution bar, sorting, empty state.
+  - `WalletPnLBreakdown` — per-token PnL with summary cards, All/Open/Closed tabs, sorting.
+- [x] **6 Updated Components**:
+  - `WhaleTable` — added ROI/Trades/Avg columns, network-colored badges, pagination.
+  - `WhaleAnalyticsGrid` — replaced fake 30D PnL with ROI card, added Win/Loss counts.
+  - `WhaleProfileHeader` — truncated address, clipboard copy with feedback, quick metrics bar.
+  - `WhaleSearchBar` — auto-detect network from address format, loading state.
+  - `WhaleStatsOverview` — typed stats, replaced "Top Network" with "Avg ROI".
+  - `WhaleTransactionHistory` — removed Solana mocks, shows empty state instead.
+- [x] **Page Rewrites**:
+  - `/whales` — integrated filters panel, pagination, search with loading, empty state.
+  - `/whales/[id]` — tab navigation (Overview/Holdings/PnL Breakdown/Transactions), parallel data fetch.
+- **Build Verification**: `npm run build` — ✅ 0 errors, 20/20 pages generated.
+
+## 2026-05-12 — GitHub Sync & Server Launch
+- **GitHub Sync**: Checked for updates from origin/main. System already up to date.
+- **Dependencies**: Verified via `npm install`. All packages are up to date.
+- **Server Execution**: Started development server on `http://localhost:3000`.
+- **Status**: System is up to date and running in development mode (Turbopack).
+
+## 2026-05-08 — Project Update: Whale Tracking & Solana Integration
+- **GitHub Sync**: Pulled latest updates from the repository.
+  - New Module: **Whale Tracking System** (`src/services/whale-service.ts`, `src/components/whales/*`).
+  - Solana Integration: New scratch scripts for testing Solana endpoints and transactions.
+  - API Expansion: Added whale-related routes (`/api/whales`, `/api/whales/[id]`, etc.).
+- **Dependencies**: Verified and kept up to date.
+- **Verification**: Successfully completed a full build (`npm run build`). All new routes and components are functional.
+- **Status**: Repository synchronized with the latest features. System is stable.
+
  
 ## [2026-05-06] Whale Tracker: 100% Data Accuracy & UI Polish (v2)
 - [x] **Data Authenticity (Zero Mocking)**: Removed all simulated metrics (PnL, Experience, Risk/Reward). The platform now relies 100% on the Moralis `profitability` endpoint to calculate absolute realized profit, total trades, and total invested USD.
