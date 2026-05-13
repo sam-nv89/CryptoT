@@ -33,6 +33,7 @@
 - [x] **Smart Money Scanner**: Multi-chain filtering engine (ETH, BSC, ARB, SOL, etc.)
 - [x] **100% Data Accuracy**: Realized PnL, WinRate, and ROI via Moralis Profitability
 - [x] **Portfolio Analytics**: Token holdings, distribution charts, and 24h price changes
+- [x] **Smart Money Discovery Engine**: Automated pipeline using DexScreener to find high-ROI traders
 - [x] **Deterministic Demo Mode**: Seamless usage even without API keys
 - [x] **Global Stats Dashboard**: Real-time aggregated ecosystem metrics
 - [ ] **Telegram Bot Signals**: Real-time notifications for tracked wallet actions

@@ -2,8 +2,28 @@
 
 import React, { useState, useMemo } from 'react';
 import { WhaleProfile } from '@/types/whales';
-import { ArrowUpDown, ChevronRight, Activity, ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
+import { ArrowUpDown, Activity, ChevronLeft, ChevronRight } from 'lucide-react';
+
+/**
+ * Human-readable USD formatter with proper thousands separators.
+ * Examples: $517 | $3,298M | $119.16M | $3.04M | $1,234,567
+ */
+function formatUsd(value: number): string {
+  if (value === 0) return '$0';
+  const abs = Math.abs(value);
+  let formatted: string;
+  if (abs >= 1_000_000_000) {
+    // Billions
+    formatted = '$' + (abs / 1_000_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'B';
+  } else if (abs >= 1_000_000) {
+    // Millions
+    formatted = '$' + (abs / 1_000_000).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + 'M';
+  } else {
+    // Under a million — show with thousands separator, no decimals
+    formatted = '$' + abs.toLocaleString('en-US', { maximumFractionDigits: 0 });
+  }
+  return value < 0 ? '-' + formatted : formatted;
+}
 
 interface Props {
   whales: WhaleProfile[];
@@ -70,12 +90,15 @@ export const WhaleTable: React.FC<Props> = ({ whales, totalCount, page, totalPag
               <SortTh label="Trades" field="totalTrades" />
               <SortTh label="Avg/Token" field="avgProfit" />
               <th className="px-4 py-3.5">Tags</th>
-              <th className="px-4 py-3.5 text-right w-12" />
             </tr>
           </thead>
           <tbody className="divide-y divide-white/[0.05]">
             {sorted.map((whale) => (
-              <tr key={whale.id} className="hover:bg-white/[0.02] transition-colors group">
+              <tr
+                key={whale.id}
+                className="hover:bg-white/[0.04] transition-colors group cursor-pointer"
+                onClick={() => { window.location.href = `/whales/${whale.id}`; }}
+              >
                 {/* Wallet */}
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2.5">
@@ -83,7 +106,7 @@ export const WhaleTable: React.FC<Props> = ({ whales, totalCount, page, totalPag
                       {whale.network}
                     </div>
                     <div>
-                      <div className="font-mono text-sm text-text-primary">
+                      <div className="font-mono text-sm text-text-primary group-hover:text-primary-300 transition-colors">
                         {whale.address.substring(0, 6)}...{whale.address.substring(whale.address.length - 4)}
                       </div>
                       <div className="text-[10px] text-text-muted flex items-center gap-1 mt-0.5">
@@ -97,16 +120,14 @@ export const WhaleTable: React.FC<Props> = ({ whales, totalCount, page, totalPag
                 {/* Balance */}
                 <td className="px-4 py-3">
                   <span className="font-mono text-sm text-text-primary">
-                    ${whale.balanceUsd > 1_000_000
-                      ? (whale.balanceUsd / 1_000_000).toFixed(2) + 'M'
-                      : whale.balanceUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {formatUsd(whale.balanceUsd)}
                   </span>
                 </td>
 
                 {/* PnL */}
                 <td className="px-4 py-3">
                   <span className={`font-mono text-sm font-medium ${whale.analytics.totalPnL > 0 ? 'text-success-400' : whale.analytics.totalPnL < 0 ? 'text-danger-400' : 'text-text-muted'}`}>
-                    {whale.analytics.totalPnL >= 0 ? '+' : ''}${Math.abs(whale.analytics.totalPnL).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                    {whale.analytics.totalPnL > 0 ? '+' : ''}{formatUsd(whale.analytics.totalPnL)}
                   </span>
                 </td>
 
@@ -151,15 +172,6 @@ export const WhaleTable: React.FC<Props> = ({ whales, totalCount, page, totalPag
                       </span>
                     ))}
                   </div>
-                </td>
-
-                {/* Action */}
-                <td className="px-4 py-3 text-right">
-                  <Link href={`/whales/${whale.id}`}>
-                    <button className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-text-secondary hover:text-white transition-all opacity-50 group-hover:opacity-100">
-                      <ChevronRight size={16} />
-                    </button>
-                  </Link>
                 </td>
               </tr>
             ))}

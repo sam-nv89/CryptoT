@@ -1,13 +1,16 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, Globe, ChevronDown } from 'lucide-react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
+import { Search, Plus, Globe, ChevronDown, Radar } from 'lucide-react';
 import { WhaleNetwork } from '@/types/whales';
 
 interface Props {
   onSearch: (address: string, network: WhaleNetwork) => void;
   onNetworkChange?: (network: WhaleNetwork | 'ALL') => void;
+  onDiscover?: () => void;
   isLoading?: boolean;
+  isDiscovering?: boolean;
 }
 
 const NETWORKS: (WhaleNetwork | 'ALL')[] = ['ALL', 'ETH', 'BSC', 'ARB', 'SOL', 'MANTLE', 'ZKSYNC'];
@@ -20,11 +23,14 @@ function detectNetwork(addr: string): WhaleNetwork | 'ALL' {
   return 'ALL';
 }
 
-export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isLoading }) => {
+export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, onDiscover, isLoading, isDiscovering }) => {
   const [address, setAddress] = useState('');
   const [network, setNetwork] = useState<WhaleNetwork | 'ALL'>('ALL');
   const [isOpen, setIsOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  // Ref to the trigger button — used to calculate portal dropdown position
+  const btnRef = useRef<HTMLButtonElement>(null);
+  // Dropdown rect state for portal positioning
+  const [dropRect, setDropRect] = useState<DOMRect | null>(null);
 
   const onNetworkChangeRef = useRef(onNetworkChange);
   useEffect(() => { onNetworkChangeRef.current = onNetworkChange; }, [onNetworkChange]);
@@ -33,13 +39,18 @@ export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isL
     onNetworkChangeRef.current?.(network);
   }, [network]);
 
+  // Close dropdown on outside click
   useEffect(() => {
+    if (!isOpen) return;
     const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsOpen(false);
+      // Close when clicking outside the button (portal dropdown handles its own clicks)
+      if (btnRef.current && !btnRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [isOpen]);
 
   // Auto-detect network when address changes
   useEffect(() => {
@@ -49,6 +60,18 @@ export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isL
     }
   }, [address, network]);
 
+  const handleToggle = useCallback(() => {
+    if (btnRef.current) {
+      setDropRect(btnRef.current.getBoundingClientRect());
+    }
+    setIsOpen(prev => !prev);
+  }, []);
+
+  const selectNetwork = useCallback((n: WhaleNetwork | 'ALL') => {
+    setNetwork(n);
+    setIsOpen(false);
+  }, []);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (address.trim() && network !== 'ALL' && !isLoading) {
@@ -56,6 +79,85 @@ export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isL
       setAddress('');
     }
   };
+
+  // Portal dropdown — rendered in document.body to escape backdrop-filter stacking contexts
+  const dropdownPortal = isOpen && dropRect && typeof document !== 'undefined'
+    ? createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: dropRect.bottom + 4,
+            left: dropRect.left,
+            minWidth: Math.max(dropRect.width, 180),
+            zIndex: 9999,
+          }}
+          onMouseDown={(e) => e.stopPropagation()} // prevent closing on internal click
+        >
+          <div style={{
+            background: '#0b0e14',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '12px',
+            boxShadow: '0 16px 56px rgba(0,0,0,0.95)',
+            overflow: 'hidden',
+          }}>
+            {/* All Networks option */}
+            <button
+              type="button"
+              onClick={() => selectNetwork('ALL')}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '10px 16px',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                background: network === 'ALL' ? 'rgba(6,182,212,0.15)' : 'transparent',
+                color: network === 'ALL' ? '#22d3ee' : '#94a3b8',
+                fontWeight: network === 'ALL' ? 700 : 400,
+                cursor: 'pointer',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={e => { if (network !== 'ALL') (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#fff'; }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = network === 'ALL' ? 'rgba(6,182,212,0.15)' : 'transparent'; (e.currentTarget as HTMLElement).style.color = network === 'ALL' ? '#22d3ee' : '#94a3b8'; }}
+            >
+              All Networks
+              {network === 'ALL' && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22d3ee', boxShadow: '0 0 8px #22d3ee', display: 'inline-block' }} />}
+            </button>
+
+            {/* Per-network options */}
+            {NETWORKS.filter(n => n !== 'ALL').map(n => (
+              <button
+                key={n}
+                type="button"
+                onClick={() => selectNetwork(n)}
+                style={{
+                  width: '100%',
+                  textAlign: 'left',
+                  padding: '10px 16px',
+                  fontSize: '14px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  background: network === n ? 'rgba(6,182,212,0.15)' : 'transparent',
+                  color: network === n ? '#22d3ee' : '#94a3b8',
+                  fontWeight: network === n ? 700 : 400,
+                  cursor: 'pointer',
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => { if (network !== n) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = network === n ? 'rgba(6,182,212,0.15)' : 'transparent'; (e.currentTarget as HTMLElement).style.color = network === n ? '#22d3ee' : '#94a3b8'; }}
+              >
+                {n}
+                {network === n && <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22d3ee', boxShadow: '0 0 8px #22d3ee', display: 'inline-block' }} />}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
 
   return (
     <div className="mb-6 animate-fade-in">
@@ -74,57 +176,30 @@ export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isL
         </div>
 
         <div className="flex gap-2">
-          <div className="relative" ref={dropdownRef}>
-            <button
-              type="button"
-              onClick={() => setIsOpen(!isOpen)}
-              className={`h-full border rounded-xl py-3 pl-9 pr-9 text-sm text-white focus:outline-none transition-all flex items-center gap-2 min-w-[120px] ${
-                isOpen ? 'bg-white/10 border-primary-500/50' : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.08]'
-              }`}
-            >
-              <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-text-muted"><Globe size={15} /></div>
-              <span className="font-medium">{network}</span>
-              <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-text-muted">
-                <ChevronDown size={13} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
-              </div>
-            </button>
+          {/* Network selector — uses portal to escape backdrop-filter stacking contexts */}
+          <button
+            ref={btnRef}
+            type="button"
+            onClick={handleToggle}
+            className={`relative border rounded-xl py-3 pl-9 pr-9 text-sm text-white focus:outline-none transition-all flex items-center gap-2 min-w-[120px] ${
+              isOpen ? 'bg-white/10 border-primary-500/50' : 'bg-white/[0.03] border-white/10 hover:bg-white/[0.08]'
+            }`}
+          >
+            <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none text-text-muted"><Globe size={15} /></div>
+            <span className="font-medium">{network}</span>
+            <div className="absolute inset-y-0 right-3 flex items-center pointer-events-none text-text-muted">
+              <ChevronDown size={13} className={`transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+            </div>
+          </button>
 
-            {isOpen && (
-              <div className="absolute top-full mt-1 left-0 w-full min-w-[160px] bg-[#0b0e14] border border-white/30 rounded-xl shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-[100] overflow-hidden animate-fade-in ring-1 ring-white/10">
-                <div className="py-1">
-                  <button
-                    type="button"
-                    onClick={() => { setNetwork('ALL'); setIsOpen(false); }}
-                    className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center justify-between border-b border-white/5 ${
-                      network === 'ALL' ? 'bg-primary-500/20 text-primary-400 font-bold' : 'text-text-secondary hover:bg-white/10 hover:text-white'
-                    }`}
-                  >
-                    All Networks
-                    {network === 'ALL' && <div className="w-1.5 h-1.5 rounded-full bg-primary-400 shadow-[0_0_8px_#22d3ee]" />}
-                  </button>
-                  {NETWORKS.filter(n => n !== 'ALL').map(n => (
-                    <button
-                      key={n} type="button"
-                      onClick={() => { setNetwork(n); setIsOpen(false); }}
-                      className={`w-full text-left px-4 py-3 text-sm transition-all flex items-center justify-between ${
-                        network === n ? 'bg-primary-500/20 text-primary-400 font-bold' : 'text-text-secondary hover:bg-white/10 hover:text-white'
-                      }`}
-                    >
-                      {n}
-                      {network === n && <div className="w-1.5 h-1.5 rounded-full bg-primary-400 shadow-[0_0_8px_#22d3ee]" />}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
+          {dropdownPortal}
 
           <button
             type="submit"
             disabled={!address.trim() || network === 'ALL' || isLoading}
             className="bg-primary-500 hover:bg-primary-400 disabled:opacity-50 disabled:cursor-not-allowed text-background-dark font-bold px-5 rounded-xl flex items-center gap-2 transition-all shadow-[0_0_20px_rgba(56,189,248,0.3)] active:scale-95"
           >
-            {isLoading ? (
+            {isLoading && !isDiscovering ? (
               <div className="w-4 h-4 border-2 border-black/20 border-t-black rounded-full animate-spin" />
             ) : (
               <Plus size={18} />
@@ -133,6 +208,30 @@ export const WhaleSearchBar: React.FC<Props> = ({ onSearch, onNetworkChange, isL
           </button>
         </div>
       </form>
+      
+      {/* Discovery Button Row */}
+      {onDiscover && (
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onDiscover}
+            disabled={isDiscovering}
+            className="group flex items-center gap-2 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isDiscovering ? (
+              <>
+                <div className="w-4 h-4 border-2 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                <span>Scanning DexScreener & RPCs...</span>
+              </>
+            ) : (
+              <>
+                <Radar size={16} className="group-hover:animate-pulse" />
+                <span>Discover Smart Money</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

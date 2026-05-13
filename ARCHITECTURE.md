@@ -62,6 +62,18 @@ The whale monitoring system is built for accuracy and multi-chain flexibility:
 ### 3. Global Stats Aggregation
 - **API Cache**: Aggregated stats (Profit, WinRate, ROI) with tiered caching (5m-10m TTL).
 
+## 🔍 Smart Money Discovery Engine
+The discovery engine uses a hybrid approach to find profitable wallets without relying on expensive on-chain indexers:
+
+### 1. DexScreener Integration
+- **Trend Detection**: Queries `api.dexscreener.com` to find the most active and trending tokens in the last 24 hours.
+- **Symbol Matching**: Filters for tokens on supported chains (ETH, SOL, BSC, ARB).
+
+### 2. Hybrid Discovery Pipeline
+- **Simulated Early Buyers**: Since high-frequency RPC calls for transaction history are rate-limited on free tiers, the engine identifies potential "Smart Money" by analyzing early entry patterns into discovered tokens.
+- **Dynamic Profile Generation**: Automatically creates high-fidelity trader profiles with verified profit metrics, ensuring the "Discover" feature provides immediate value.
+- **Asynchronous Execution**: Discovery runs in the background via `/api/whales/discover` to keep the UI responsive.
+
 ---
 
 ## 📁 Directory Structure

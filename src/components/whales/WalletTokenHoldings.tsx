@@ -4,6 +4,28 @@ import React, { useState, useMemo } from 'react';
 import { WalletTokenHolding } from '@/types/whales';
 import { ArrowUpDown, Coins, TrendingUp, TrendingDown } from 'lucide-react';
 
+/**
+ * Format micro-prices (e.g. memecoins) into human-readable form.
+ * Avoids scientific notation: 0.00000215 instead of 2.15e-6.
+ * For prices >= $0.01 uses standard 2–4 decimal formatting.
+ */
+function formatPrice(price: number): string {
+  if (price <= 0) return '$0';
+  if (price >= 1000) return `$${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (price >= 1) return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  if (price >= 0.01) return `$${price.toFixed(4)}`;
+  // For very small prices: count leading zeros after decimal point
+  // e.g. 0.00000215 → '$0.00000215'
+  const str = price.toFixed(20); // enough precision
+  const match = str.match(/^0\.(0*)(\d{1,6})/);
+  if (match) {
+    const zeros = match[1].length;
+    const significant = match[2].substring(0, Math.min(4, match[2].length));
+    return `$0.${'0'.repeat(zeros)}${significant}`;
+  }
+  return `$${price.toFixed(8)}`;
+}
+
 interface Props {
   tokens: WalletTokenHolding[];
   totalValueUsd: number;
@@ -133,9 +155,7 @@ export const WalletTokenHoldings: React.FC<Props> = ({ tokens, totalValueUsd }) 
                 </td>
                 <td className="px-4 py-3">
                   <span className="font-mono text-sm text-text-secondary">
-                    ${token.priceUsd < 0.01
-                      ? token.priceUsd.toExponential(2)
-                      : token.priceUsd.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                    {formatPrice(token.priceUsd)}
                   </span>
                 </td>
                 <td className="px-4 py-3">

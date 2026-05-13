@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { SlidersHorizontal, RotateCcw, ChevronDown, ChevronUp } from 'lucide-react';
 import { WalletSearchFilters, FILTER_PRESETS, DEFAULT_FILTERS, WhaleSortKey } from '@/types/whale-filters';
 import { WhaleNetwork } from '@/types/whales';
@@ -22,18 +23,93 @@ const SORT_OPTIONS: { value: WhaleSortKey; label: string }[] = [
 
 const CustomNetworkSelect: React.FC<{ value?: WhaleNetwork; onChange: (net?: WhaleNetwork) => void }> = ({ value, onChange }) => {
   const [isOpen, setIsOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropRect, setDropRect] = useState<DOMRect | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
 
+  // Close on outside click
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setIsOpen(false); };
+    if (!isOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (btnRef.current && !btnRef.current.contains(e.target as Node)) setIsOpen(false);
+    };
     document.addEventListener('mousedown', handleClick);
     return () => document.removeEventListener('mousedown', handleClick);
+  }, [isOpen]);
+
+  const handleToggle = useCallback(() => {
+    if (btnRef.current) setDropRect(btnRef.current.getBoundingClientRect());
+    setIsOpen(prev => !prev);
   }, []);
 
+  const select = useCallback((net?: WhaleNetwork) => {
+    onChange(net);
+    setIsOpen(false);
+  }, [onChange]);
+
+  const portal = isOpen && dropRect && typeof document !== 'undefined'
+    ? createPortal(
+        <div
+          style={{
+            position: 'fixed',
+            top: dropRect.bottom + 4,
+            left: dropRect.left,
+            minWidth: Math.max(dropRect.width, 160),
+            zIndex: 9999,
+          }}
+          onMouseDown={e => e.stopPropagation()}
+        >
+          <div style={{
+            background: '#0b0e14',
+            border: '1px solid rgba(255,255,255,0.2)',
+            borderRadius: '10px',
+            boxShadow: '0 16px 56px rgba(0,0,0,0.95)',
+            overflow: 'hidden',
+          }}>
+            <button
+              onClick={() => select(undefined)}
+              style={{
+                width: '100%', textAlign: 'left', padding: '9px 12px', fontSize: '13px',
+                background: !value ? 'rgba(6,182,212,0.15)' : 'transparent',
+                color: !value ? '#22d3ee' : '#94a3b8',
+                fontWeight: !value ? 700 : 400,
+                cursor: 'pointer',
+                borderBottom: '1px solid rgba(255,255,255,0.06)',
+                display: 'block',
+              }}
+              onMouseEnter={e => { if (value) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = !value ? 'rgba(6,182,212,0.15)' : 'transparent'; (e.currentTarget as HTMLElement).style.color = !value ? '#22d3ee' : '#94a3b8'; }}
+            >
+              All Networks
+            </button>
+            {NETWORKS.map(n => (
+              <button
+                key={n}
+                onClick={() => select(n)}
+                style={{
+                  width: '100%', textAlign: 'left', padding: '9px 12px', fontSize: '13px',
+                  background: value === n ? 'rgba(6,182,212,0.15)' : 'transparent',
+                  color: value === n ? '#22d3ee' : '#94a3b8',
+                  fontWeight: value === n ? 700 : 400,
+                  cursor: 'pointer',
+                  display: 'block',
+                }}
+                onMouseEnter={e => { if (value !== n) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.06)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = value === n ? 'rgba(6,182,212,0.15)' : 'transparent'; (e.currentTarget as HTMLElement).style.color = value === n ? '#22d3ee' : '#94a3b8'; }}
+              >
+                {n}
+              </button>
+            ))}
+          </div>
+        </div>,
+        document.body
+      )
+    : null;
+
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative">
       <button
-        onClick={() => setIsOpen(!isOpen)}
+        ref={btnRef}
+        onClick={handleToggle}
         className={`w-full border rounded-lg px-3 py-2 text-sm text-white flex items-center justify-between transition-all ${
           isOpen ? 'bg-white/10 border-primary-500/50' : 'bg-[#0d1117] border-white/10 hover:bg-white/[0.05]'
         }`}
@@ -41,27 +117,7 @@ const CustomNetworkSelect: React.FC<{ value?: WhaleNetwork; onChange: (net?: Wha
         <span className="font-medium">{value || 'All'}</span>
         <ChevronDown size={14} className={`text-text-muted transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-      {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-[#0b0e14] border border-white/30 rounded-lg shadow-[0_12px_48px_rgba(0,0,0,0.9)] z-[110] overflow-hidden animate-fade-in ring-1 ring-white/10">
-          <button 
-            onClick={() => { onChange(undefined); setIsOpen(false); }} 
-            className="w-full text-left px-3 py-2.5 text-sm text-text-secondary hover:bg-white/10 hover:text-white transition-colors border-b border-white/5"
-          >
-            All Networks
-          </button>
-          {NETWORKS.map(n => (
-            <button
-              key={n}
-              onClick={() => { onChange(n); setIsOpen(false); }}
-              className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center justify-between ${
-                value === n ? 'bg-primary-500/20 text-primary-400 font-bold' : 'text-text-secondary hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
-      )}
+      {portal}
     </div>
   );
 };

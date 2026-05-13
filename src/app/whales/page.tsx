@@ -15,6 +15,7 @@ export default function WhalesPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
+  const [isDiscovering, setIsDiscovering] = useState(false);
   const [filters, setFilters] = useState<WalletSearchFilters>({ ...DEFAULT_FILTERS });
 
   const fetchWhales = useCallback(async (f: WalletSearchFilters) => {
@@ -89,6 +90,26 @@ export default function WhalesPage() {
     }
   };
 
+  const handleDiscover = async () => {
+    setIsDiscovering(true);
+    try {
+      const response = await fetch('/api/whales/discover');
+      if (!response.ok) throw new Error('Discovery failed');
+      
+      const data = await response.json();
+      if (data.success && data.whales?.length > 0) {
+        // Automatically switch to ALL networks and reset pagination to see the new whales
+        setFilters(prev => ({ ...prev, network: undefined, page: 1 }));
+        // It will trigger fetchWhales via useEffect
+      }
+    } catch (error) {
+      console.error('Discovery error:', error);
+      alert('Failed to discover new smart money wallets. Please try again.');
+    } finally {
+      setIsDiscovering(false);
+    }
+  };
+
   return (
     <>
       <Header title="Smart Money Scanner" subtitle="On-chain wallet analytics & smart money tracking" />
@@ -97,7 +118,9 @@ export default function WhalesPage() {
       <WhaleSearchBar
         onSearch={handleSearch}
         onNetworkChange={handleNetworkChange}
+        onDiscover={handleDiscover}
         isLoading={isSearching}
+        isDiscovering={isDiscovering}
       />
       <WalletFiltersPanel filters={filters} onChange={handleFiltersChange} />
 

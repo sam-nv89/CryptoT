@@ -4,6 +4,25 @@ import React, { useState, useMemo } from 'react';
 import { TokenPnLEntry, WalletPnLResponse } from '@/types/whales';
 import { ArrowUpDown, TrendingUp, TrendingDown, BarChart3, Filter } from 'lucide-react';
 
+/**
+ * Human-readable price format: avoids scientific notation for tiny meme-coin prices.
+ * e.g. 0.00000215 → '$0.00000215' instead of '$2.15e-6'
+ */
+function formatPrice(price: number): string {
+  if (price <= 0) return '—';
+  if (price >= 1000) return `$${price.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (price >= 1) return `$${price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+  if (price >= 0.01) return `$${price.toFixed(4)}`;
+  const str = price.toFixed(20);
+  const match = str.match(/^0\.(0*)(\d{1,6})/);
+  if (match) {
+    const zeros = match[1].length;
+    const significant = match[2].substring(0, Math.min(4, match[2].length));
+    return `$0.${'0'.repeat(zeros)}${significant}`;
+  }
+  return `$${price.toFixed(8)}`;
+}
+
 interface Props {
   data: WalletPnLResponse;
 }
@@ -140,10 +159,10 @@ export const WalletPnLBreakdown: React.FC<Props> = ({ data }) => {
                   </div>
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-text-secondary">
-                  ${entry.avgBuyPriceUsd < 0.01 ? entry.avgBuyPriceUsd.toExponential(2) : entry.avgBuyPriceUsd.toFixed(2)}
+                  {formatPrice(entry.avgBuyPriceUsd)}
                 </td>
                 <td className="px-4 py-3 font-mono text-xs text-text-secondary">
-                  {entry.avgSellPriceUsd > 0 ? `$${entry.avgSellPriceUsd < 0.01 ? entry.avgSellPriceUsd.toExponential(2) : entry.avgSellPriceUsd.toFixed(2)}` : '—'}
+                  {entry.avgSellPriceUsd > 0 ? formatPrice(entry.avgSellPriceUsd) : '—'}
                 </td>
                 <td className="px-4 py-3 font-mono text-sm text-text-primary">
                   ${entry.totalBoughtUsd.toLocaleString(undefined, { maximumFractionDigits: 0 })}
